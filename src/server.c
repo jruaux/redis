@@ -8322,6 +8322,7 @@ int zsetTest(int argc, char **argv, int flags);
 int zsetBtreeTest(int argc, char **argv, int flags);
 int vectorTest(int argc, char **argv, int flags);
 int lzfTest(int argc, char **argv, int flags);
+int streamCompressionTest(int argc, char **argv, int flags);
 struct redisTest {
     char *name;
     redisTestProc *proc;
@@ -8341,6 +8342,7 @@ struct redisTest {
     {"mstr", mstrTest},
     {"dict", dictTest},
     {"listpack", listpackTest},
+    {"stream-compression", streamCompressionTest},
     {"kvstore", kvstoreTest},
     {"fwtree", fwtreeTest},
     {"estore", estoreTest},

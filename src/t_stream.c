@@ -12,6 +12,407 @@
 #include "stream.h"
 #include "xxhash.h"
 #include <string.h>
+#ifdef USE_COMPRESSION
+#define ZSTD_STATIC_LINKING_ONLY
+#include <zstd.h>
+#endif
+
+/* Memory-only SZ02 envelopes hold a dictionary ID, never dictionary bytes.
+ * RDB always serializes ordinary decoded listpacks. Dictionary generations are
+ * private to the stream, immutable, and retained while current or referenced. */
+struct streamCompressionDict {
+    struct streamCompressionDict *next;
+    sds bytes;
+    uint32_t id;
+    size_t refs;
+};
+
+static int streamListpackCompressed(unsigned char *lp) {
+    int64_t count;
+    unsigned char *first = lpFirst(lp);
+    return first && lpGet(first, &count, NULL) == NULL && count == -1;
+}
+
+static uint32_t streamCompressionRead32(const unsigned char *p) {
+    return ((uint32_t)p[0]<<24) | ((uint32_t)p[1]<<16) | ((uint32_t)p[2]<<8) | p[3];
+}
+
+static streamCompressionDict *streamCompressionFindDict(stream *s, uint32_t id) {
+    for (streamCompressionDict *d = s->compression_dicts; d; d = d->next)
+        if (d->id == id) return d;
+    return NULL;
+}
+
+static void streamCompressionCollect(stream *s) {
+    streamCompressionDict **link = &s->compression_dicts;
+    while (*link) {
+        streamCompressionDict *d = *link;
+        if (!d->refs && d->bytes != s->compression_dict) {
+            *link = d->next;
+            s->alloc_size -= zmalloc_usable_size(d) + sdsAllocSize(d->bytes);
+            sdsfree(d->bytes);
+            zfree(d);
+        } else {
+            link = &d->next;
+        }
+    }
+}
+
+/* Call only after validating all command options. A collision or full registry
+ * is rejected atomically. A zero-reference current generation can be replaced
+ * at the limit without exceeding the retained-generation cap. */
+static const char *streamCompressionSetDictionary(stream *s, sds bytes) {
+    streamCompressionDict *selected = NULL;
+    if (bytes) {
+#ifdef USE_COMPRESSION
+        uint32_t id = ZSTD_getDictID_fromDict(bytes, sdslen(bytes));
+        selected = streamCompressionFindDict(s, id);
+        if (selected && (sdslen(selected->bytes) != sdslen(bytes) ||
+                         memcmp(selected->bytes, bytes, sdslen(bytes))))
+            return "Zstd dictionary ID collision with a retained generation";
+        if (!selected) {
+            unsigned retained = 0;
+            for (streamCompressionDict *d = s->compression_dicts; d; d = d->next)
+                if (d->refs) retained++;
+            if (retained >= STREAM_COMPRESSION_MAX_GENERATIONS)
+                return "Too many referenced Zstd dictionary generations (maximum 16)";
+            s->compression_dict = NULL;
+            streamCompressionCollect(s);
+            selected = zmalloc(sizeof(*selected));
+            selected->bytes = sdsdup(bytes);
+            selected->id = id;
+            selected->refs = 0;
+            selected->next = s->compression_dicts;
+            s->compression_dicts = selected;
+            s->alloc_size += zmalloc_usable_size(selected) + sdsAllocSize(selected->bytes);
+        }
+#else
+        return "Stream compression requires BUILD_COMPRESSION=yes";
+#endif
+    }
+    s->compression_dict = selected ? selected->bytes : NULL;
+    streamCompressionCollect(s);
+    return NULL;
+}
+
+/* Only stored envelopes own dictionary references; decoded scratch never does. */
+static void streamFreeStoredListpack(stream *s, unsigned char *lp) {
+    if (streamListpackCompressed(lp)) {
+        int64_t len;
+        unsigned char *blob = lpGet(lpNext(lp, lpFirst(lp)), &len, NULL);
+        serverAssert(blob && len >= 16 && !memcmp(blob, "SZ02", 4));
+        uint32_t id = streamCompressionRead32(blob+12);
+        if (id) {
+            streamCompressionDict *d = streamCompressionFindDict(s, id);
+            serverAssert(d && d->refs);
+            d->refs--;
+            streamCompressionCollect(s);
+        }
+    }
+    s->alloc_size -= lpBytes(lp);
+    lpFree(lp);
+}
+
+#ifdef USE_COMPRESSION
+static void streamCompressionWrite32(unsigned char *p, uint32_t v) {
+    p[0] = v>>24; p[1] = v>>16; p[2] = v>>8; p[3] = v;
+}
+
+/* All Zstd allocations go through Redis, including transient contexts and
+ * dictionary digestion. The stack-owned ledger is valid until context free. */
+typedef struct streamCompressionScratch {
+    size_t current;
+    size_t peak;
+} streamCompressionScratch;
+
+static void *streamCompressionAlloc(void *opaque, size_t size) {
+    streamCompressionScratch *scratch = opaque;
+    size_t usable;
+    void *ptr = zmalloc_usable(size, &usable);
+    scratch->current += usable;
+    if (scratch->current > scratch->peak) scratch->peak = scratch->current;
+    return ptr;
+}
+
+static void streamCompressionFree(void *opaque, void *ptr) {
+    if (!ptr) return;
+    streamCompressionScratch *scratch = opaque;
+    scratch->current -= zmalloc_usable_size(ptr);
+    zfree(ptr);
+}
+#endif
+
+int streamCompressionDictValid(const unsigned char *dict, size_t len) {
+#ifdef USE_COMPRESSION
+    if (!len || len > STREAM_COMPRESSION_MAX_DICT || !ZSTD_getDictID_fromDict(dict, len)) return 0;
+    streamCompressionScratch scratch = {0};
+    ZSTD_customMem mem = {streamCompressionAlloc, streamCompressionFree, &scratch};
+    ZSTD_DDict *dd = ZSTD_createDDict_advanced(dict, len, ZSTD_dlm_byCopy, ZSTD_dct_auto, mem);
+    if (!dd) return 0;
+    ZSTD_freeDDict(dd);
+    serverAssert(!scratch.current);
+    return 1;
+#else
+    UNUSED(dict); UNUSED(len);
+    return 0;
+#endif
+}
+
+unsigned char *streamTryDecodeListpack(stream *s, unsigned char *lp, const char **error) {
+    *error = NULL;
+    if (!streamListpackCompressed(lp)) return lp;
+#ifdef USE_COMPRESSION
+    int64_t len;
+    unsigned char *p = lpNext(lp, lpFirst(lp));
+    unsigned char *blob = p ? lpGet(p, &len, NULL) : NULL;
+    if (!blob || len < 16 || lpNext(lp, p) || memcmp(blob, "SZ02", 4)) goto invalid;
+    size_t rawlen = streamCompressionRead32(blob+4);
+    if (rawlen < 7 || rawlen > STREAM_COMPRESSION_MAX_BLOCK ||
+        streamCompressionRead32(blob+8) != 1) goto invalid;
+    unsigned dictid = streamCompressionRead32(blob+12);
+    streamCompressionDict *d = dictid ? streamCompressionFindDict(s, dictid) : NULL;
+    unsigned char *frame = blob+16;
+    size_t framelen = len-16;
+    if ((dictid && !d) || ZSTD_getDictID_fromFrame(frame, framelen) != dictid) {
+        *error = "Stream compressed block has a missing or invalid dictionary";
+        return NULL;
+    }
+    if (ZSTD_getFrameContentSize(frame, framelen) != rawlen ||
+        ZSTD_findFrameCompressedSize(frame, framelen) != framelen) goto invalid;
+    unsigned char *decoded = zmalloc(rawlen);
+    streamCompressionScratch scratch = {0};
+    ZSTD_customMem mem = {streamCompressionAlloc, streamCompressionFree, &scratch};
+    ZSTD_DCtx *ctx = ZSTD_createDCtx_advanced(mem);
+    if (!ctx) { zfree(decoded); goto invalid; }
+    size_t result = ZSTD_DCtx_setParameter(ctx, ZSTD_d_windowLogMax, 16);
+    if (!ZSTD_isError(result))
+        result = ZSTD_decompress_usingDict(ctx, decoded, rawlen, frame, framelen,
+                                          d ? d->bytes : NULL, d ? sdslen(d->bytes) : 0);
+    size_t peak = scratch.peak + zmalloc_usable_size(decoded);
+    if (peak > s->decompression_scratch_peak) s->decompression_scratch_peak = peak;
+    ZSTD_freeDCtx(ctx);
+    serverAssert(!scratch.current);
+    if (ZSTD_isError(result) || result != rawlen ||
+        !streamValidateListpackIntegrity(decoded, rawlen, 1)) {
+        zfree(decoded);
+        goto invalid;
+    }
+    return decoded;
+invalid:
+    *error = "Corrupt stream compressed block or decoded length";
+#else
+    UNUSED(s);
+    *error = "Stream compression requires BUILD_COMPRESSION=yes";
+#endif
+    return NULL;
+}
+
+unsigned char *streamDecodeListpack(stream *s, unsigned char *lp) {
+    const char *error;
+    unsigned char *decoded = streamTryDecodeListpack(s, lp, &error);
+    if (!decoded) serverPanic("%s", error);
+    return decoded;
+}
+
+static unsigned char *streamCompressListpack(stream *s, unsigned char *lp) {
+#ifdef USE_COMPRESSION
+    size_t rawlen = lpBytes(lp), dictlen = s->compression_dict ? sdslen(s->compression_dict) : 0;
+    if (!s->compression || rawlen > STREAM_COMPRESSION_MAX_BLOCK) return lp;
+    size_t cap = ZSTD_compressBound(rawlen);
+    unsigned char *blob = zmalloc(16+cap);
+    memcpy(blob, "SZ02", 4);
+    streamCompressionWrite32(blob+4, rawlen);
+    streamCompressionWrite32(blob+8, 1); /* Encoding: Zstd. */
+    uint32_t dictid = ZSTD_getDictID_fromDict(s->compression_dict, dictlen);
+    streamCompressionWrite32(blob+12, dictid);
+    streamCompressionScratch scratch = {0};
+    ZSTD_customMem mem = {streamCompressionAlloc, streamCompressionFree, &scratch};
+    ZSTD_CCtx *ctx = ZSTD_createCCtx_advanced(mem);
+    size_t result = ctx ? ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, STREAM_COMPRESSION_LEVEL) : (size_t)-1;
+    if (!ZSTD_isError(result)) result = ZSTD_CCtx_setParameter(ctx, ZSTD_c_checksumFlag, 1);
+    if (!ZSTD_isError(result)) result = ZSTD_CCtx_loadDictionary(ctx, s->compression_dict, dictlen);
+    if (!ZSTD_isError(result)) result = ZSTD_compress2(ctx, blob+16, cap, lp, rawlen);
+    size_t peak = scratch.peak + zmalloc_usable_size(blob);
+    ZSTD_freeCCtx(ctx);
+    serverAssert(!scratch.current);
+    if (peak > s->compression_scratch_peak) s->compression_scratch_peak = peak;
+    if (ZSTD_isError(result)) { zfree(blob); return lp; }
+    unsigned char *packed = lpNew(0);
+    packed = lpAppendInteger(packed, -1);
+    packed = lpAppend(packed, blob, 16+result);
+    peak = zmalloc_usable_size(blob) + zmalloc_usable_size(packed);
+    if (peak > s->compression_scratch_peak) s->compression_scratch_peak = peak;
+    zfree(blob);
+    /* Dictionary storage is charged once to the stream, never per candidate.
+     * Its actual cost remains in MEMORY USAGE and total Redis memory even
+     * before enough compressed blocks exist to break even. */
+    if (lpBytes(packed) >= rawlen || zmalloc_usable_size(packed) >= zmalloc_usable_size(lp)) {
+        lpFree(packed);
+        return lp;
+    }
+    if (dictid) {
+        streamCompressionDict *d = streamCompressionFindDict(s, dictid);
+        serverAssert(d);
+        d->refs++;
+    }
+    s->alloc_size -= rawlen;
+    s->alloc_size += lpBytes(packed);
+    lpFree(lp);
+    return packed;
+#else
+    UNUSED(s);
+    return lp;
+#endif
+}
+
+unsigned char *streamCompressLoadedListpack(stream *s, unsigned char *lp) {
+    serverAssert(s->compression && !s->compression_dict);
+    return streamCompressListpack(s, lp);
+}
+
+#ifdef REDIS_TEST
+#include "testhelp.h"
+#ifdef USE_COMPRESSION
+#include <zdict.h>
+
+static unsigned char *streamCompressionTestListpack(void) {
+    unsigned char value[4096];
+    memset(value, 'a', sizeof(value));
+    unsigned char *lp = lpNew(0);
+    lp = lpAppendInteger(lp, 1);
+    lp = lpAppendInteger(lp, 0);
+    lp = lpAppendInteger(lp, 1);
+    lp = lpAppend(lp, (unsigned char*)"f", 1);
+    lp = lpAppendInteger(lp, 0);
+    lp = lpAppendInteger(lp, 2);
+    lp = lpAppendInteger(lp, 0);
+    lp = lpAppendInteger(lp, 1);
+    lp = lpAppend(lp, value, sizeof(value));
+    return lpAppendInteger(lp, 4);
+}
+#endif
+
+int streamCompressionTest(int argc, char **argv, int flags) {
+    UNUSED(argc); UNUSED(argv); UNUSED(flags);
+#ifdef USE_COMPRESSION
+    stream s = {0};
+    s.compression = 1;
+    unsigned char *raw = streamCompressionTestListpack();
+    size_t rawlen = lpBytes(raw);
+    s.alloc_size = rawlen;
+    unsigned char *packed = streamCompressListpack(&s, lpDup(raw));
+    test_cond("sealed block compressed", streamListpackCompressed(packed));
+    const char *error;
+    unsigned char *decoded = streamTryDecodeListpack(&s, packed, &error);
+    test_cond("exact listpack round trip", decoded && !error && lpBytes(decoded) == rawlen &&
+              !memcmp(raw, decoded, rawlen));
+    lpFree(decoded);
+    int64_t len;
+    unsigned char *blob = lpGet(lpNext(packed, lpFirst(packed)), &len, NULL);
+    blob[len-1] ^= 1;
+    test_cond("checksum corruption rejected", !streamTryDecodeListpack(&s, packed, &error) && error);
+    blob[len-1] ^= 1;
+    streamCompressionWrite32(blob+4, STREAM_COMPRESSION_MAX_BLOCK+1);
+    test_cond("oversized decode rejected", !streamTryDecodeListpack(&s, packed, &error) && error);
+    streamCompressionWrite32(blob+4, rawlen-1);
+    test_cond("incorrect decode length rejected", !streamTryDecodeListpack(&s, packed, &error) && error);
+    streamCompressionWrite32(blob+4, rawlen);
+    streamCompressionWrite32(blob+12, 42);
+    test_cond("missing dictionary rejected", !streamTryDecodeListpack(&s, packed, &error) && error);
+    streamCompressionWrite32(blob+12, 0);
+    unsigned char *truncated = lpNew(0);
+    truncated = lpAppendInteger(truncated, -1);
+    truncated = lpAppend(truncated, blob, len-1);
+    test_cond("truncated frame rejected", !streamTryDecodeListpack(&s, truncated, &error) && error);
+    lpFree(truncated);
+    lpFree(packed);
+
+    /* Offline-style representative training: no training in the append path. */
+    char samples[1000][128];
+    size_t sizes[1000];
+    for (int i = 0; i < 1000; i++)
+        sizes[i] = snprintf(samples[i], sizeof(samples[i]), "{\"sensor\":%d,\"site\":\"west\",\"value\":%d}", i, i%91);
+    char joined[128000];
+    size_t used = 0;
+    for (int i = 0; i < 1000; i++) { memcpy(joined+used, samples[i], sizes[i]); used += sizes[i]; }
+    unsigned char dict[1024];
+    size_t dictlen = ZDICT_trainFromBuffer(dict, sizeof(dict), joined, sizes, 1000);
+    test_cond("trained dictionary accepted", !ZDICT_isError(dictlen) && streamCompressionDictValid(dict, dictlen));
+    s.alloc_size = rawlen;
+    sds dictbytes = sdsnewlen(dict, dictlen);
+    test_cond("shared dictionary registered", !streamCompressionSetDictionary(&s, dictbytes));
+    sdsfree(dictbytes);
+    packed = streamCompressListpack(&s, lpDup(raw));
+    test_cond("dictionary block compressed", streamListpackCompressed(packed));
+    test_cond("dictionary reference acquired", s.compression_dicts->refs == 1);
+    streamCompressionSetDictionary(&s, NULL);
+    decoded = streamTryDecodeListpack(&s, packed, &error);
+    test_cond("block dictionary survives rotation", decoded && !memcmp(raw, decoded, rawlen));
+    lpFree(decoded);
+    blob = lpGet(lpNext(packed, lpFirst(packed)), &len, NULL);
+    blob[12] ^= 1;
+    test_cond("dictionary identity mismatch rejected", !streamTryDecodeListpack(&s, packed, &error) && error);
+    blob[12] ^= 1;
+    streamFreeStoredListpack(&s, packed);
+    test_cond("retired dictionary collected after last block", !s.compression_dicts);
+
+    unsigned char *generations[STREAM_COMPRESSION_MAX_GENERATIONS];
+    s.alloc_size = 0;
+    for (unsigned i = 0; i < STREAM_COMPRESSION_MAX_GENERATIONS; i++) {
+        /* Dictionary IDs are a little-endian field in the trained blob. */
+        uint32_t id = i+1;
+        dict[4] = id; dict[5] = id>>8; dict[6] = id>>16; dict[7] = id>>24;
+        dictbytes = sdsnewlen(dict, dictlen);
+        serverAssert(!streamCompressionSetDictionary(&s, dictbytes));
+        sdsfree(dictbytes);
+        s.alloc_size += rawlen;
+        generations[i] = streamCompressListpack(&s, lpDup(raw));
+        serverAssert(streamListpackCompressed(generations[i]));
+    }
+    dict[4] = 99;
+    dictbytes = sdsnewlen(dict, dictlen);
+    test_cond("referenced generation limit rejects rotation atomically",
+              streamCompressionSetDictionary(&s, dictbytes) != NULL &&
+              s.compression_dicts->id == STREAM_COMPRESSION_MAX_GENERATIONS);
+    streamFreeStoredListpack(&s, generations[0]);
+    test_cond("reclaiming a generation permits rotation", !streamCompressionSetDictionary(&s, dictbytes));
+    sdsfree(dictbytes);
+    dict[dictlen-1] ^= 1;
+    dictbytes = sdsnewlen(dict, dictlen);
+    test_cond("retained dictionary ID collision rejected", streamCompressionSetDictionary(&s, dictbytes) != NULL);
+    sdsfree(dictbytes);
+    streamCompressionSetDictionary(&s, NULL);
+    for (unsigned i = 1; i < STREAM_COMPRESSION_MAX_GENERATIONS; i++) {
+        decoded = streamDecodeListpack(&s, generations[i]);
+        serverAssert(!memcmp(raw, decoded, rawlen));
+        lpFree(decoded);
+        streamFreeStoredListpack(&s, generations[i]);
+    }
+    test_cond("all dictionary generations and blocks freed", !s.compression_dicts && s.alloc_size == 0);
+    lpFree(raw);
+    raw = lpNew(0);
+    raw = lpAppendInteger(raw, 1);
+    s.alloc_size = lpBytes(raw);
+    packed = streamCompressListpack(&s, raw);
+    test_cond("framing expansion falls back to raw", packed == raw);
+    lpFree(raw);
+#else
+    test_cond("compression is disabled in this build", !streamCompressionDictValid(NULL, 0));
+#endif
+    return 0;
+}
+#endif
+
+/* Mutations materialize a node and leave it raw. Reads use iterator scratch. */
+static unsigned char *streamMaterializeNode(stream *s, raxIterator *ri) {
+    unsigned char *lp = streamDecodeListpack(s, ri->data);
+    if (lp != ri->data) {
+        s->alloc_size += lpBytes(lp);
+        streamFreeStoredListpack(s, ri->data);
+        raxIteratorSetData(ri, lp);
+    }
+    return lp;
+}
 
 /* Every stream item inside the listpack, has a flags field that is used to
  * mark the entry as deleted, or having the same field as the "master"
@@ -75,6 +476,11 @@ stream *streamNew(void) {
     stream *s = zmalloc_usable(sizeof(*s), &usable);
     s->alloc_size = usable;
     s->rax = raxNewEx(0, &s->alloc_size, sizeof(streamID));
+    s->compression = 0;
+    s->compression_dict = NULL;
+    s->compression_dicts = NULL;
+    s->compression_scratch_peak = 0;
+    s->decompression_scratch_peak = 0;
     s->length = 0;
     s->first_id.ms = 0;
     s->first_id.seq = 0;
@@ -100,8 +506,7 @@ stream *streamNew(void) {
 
 static void streamLpFreeGeneric(void *lp, void *strm) {
     stream *s = strm;
-    s->alloc_size -= lpBytes(lp);
-    lpFree(lp);
+    streamFreeStoredListpack(s, lp);
 }
 
 void streamFreeIdmpProducerGeneric(void *producer, void *strm) {
@@ -111,7 +516,10 @@ void streamFreeIdmpProducerGeneric(void *producer, void *strm) {
 
 /* Free a stream, including the listpacks stored inside the radix tree. */
 void freeStream(stream *s) {
+    s->compression_dict = NULL;
     raxFreeWithCbAndContext(s->rax, streamLpFreeGeneric, s);
+    streamCompressionCollect(s);
+    serverAssert(!s->compression_dicts);
     if (s->cgroups)
         raxFreeWithCbAndContext(s->cgroups, streamFreeCGGeneric, s);
     if (s->cgroups_ref)
@@ -402,6 +810,16 @@ robj *streamDup(robj *o) {
     new_s->last_id = s->last_id;
     new_s->max_deleted_entry_id = s->max_deleted_entry_id;
     new_s->entries_added = s->entries_added;
+    new_s->compression = s->compression;
+    for (streamCompressionDict *d = s->compression_dicts; d; d = d->next) {
+        streamCompressionDict *copy = zmalloc(sizeof(*copy));
+        *copy = *d;
+        copy->bytes = sdsdup(d->bytes);
+        copy->next = new_s->compression_dicts;
+        new_s->compression_dicts = copy;
+        new_s->alloc_size += zmalloc_usable_size(copy) + sdsAllocSize(copy->bytes);
+        if (d->bytes == s->compression_dict) new_s->compression_dict = copy->bytes;
+    }
     raxStop(&ri);
 
     /* IDMP state */
@@ -740,7 +1158,7 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
 
     if (!raxEOF(&ri)) {
         /* Get a reference to the tail node listpack. */
-        lp = ri.data;
+        lp = streamMaterializeNode(s, &ri);
         lp_bytes = lpBytes(lp);
     }
     raxStop(&ri);
@@ -805,6 +1223,7 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
             lp = lpShrinkToFit(lp);
             s->alloc_size -= lp_bytes;
             s->alloc_size += lpBytes(lp);
+            lp = streamCompressListpack(s, lp);
             if (ri.data != lp)
                 raxIteratorSetData(&ri, lp);
             lp = NULL;
@@ -1055,7 +1474,7 @@ int64_t streamTrim(redisDb *db, stream *s, streamAddTrimArgs *args, streamID *ma
         if (trim_strategy == TRIM_STRATEGY_MAXLEN && s->length <= maxlen)
             break;
 
-        unsigned char *lp = ri.data, *p = lpFirst(lp);
+        unsigned char *lp = streamMaterializeNode(s, &ri), *p = lpFirst(lp);
         int64_t entries = lpGetInteger(p);
 
         /* Check if we exceeded the amount of work we could do */
@@ -1582,6 +2001,7 @@ void streamIteratorStart(streamIterator *si, stream *s, streamID *start, streamI
     }
     si->stream = s;
     si->lp = NULL;     /* There is no current listpack right now. */
+    si->decoded_lp = NULL;
     si->lp_last_ele = NULL;
     si->lp_ele = NULL; /* Current listpack cursor. */
     si->rev = rev;     /* Direction, if non-zero reversed, from end to start. */
@@ -1603,13 +2023,16 @@ int streamIteratorGetID(streamIterator *si, streamID *id, int64_t *numfields) {
          * iteration or the previous listpack was completely iterated.
          * Go to the next node. */
         if (si->lp == NULL || si->lp_ele == NULL) {
+            lpFree(si->decoded_lp);
+            si->decoded_lp = NULL;
             if (!si->rev && !raxNext(&si->ri)) return 0;
             else if (si->rev && !raxPrev(&si->ri)) return 0;
             serverAssert(si->ri.key_len == sizeof(streamID));
             /* Get the master ID. */
             streamDecodeID(si->ri.key,&si->master_id);
             /* Get the master fields count. */
-            si->lp = si->ri.data;
+            si->lp = streamDecodeListpack(si->stream, si->ri.data);
+            if (si->lp != si->ri.data) si->decoded_lp = si->lp;
             si->lp_ele = lpFirst(si->lp);           /* Seek items count */
             si->lp_ele = lpNext(si->lp,si->lp_ele); /* Seek deleted count. */
             si->lp_ele = lpNext(si->lp,si->lp_ele); /* Seek num fields. */
@@ -1770,6 +2193,12 @@ void streamIteratorGetField(streamIterator *si, unsigned char **fieldptr, unsign
 void streamIteratorRemoveEntry(streamIterator *si, streamID *current) {
     stream *s = si->stream;
     unsigned char *lp = si->lp;
+    if (si->decoded_lp) {
+        s->alloc_size += lpBytes(lp);
+        streamFreeStoredListpack(s, si->ri.data);
+        raxIteratorSetData(&si->ri, lp);
+        si->decoded_lp = NULL; /* Ownership transferred to the stream. */
+    }
     size_t oldsize = lpBytes(lp);
     int64_t aux;
 
@@ -1829,6 +2258,8 @@ void streamIteratorRemoveEntry(streamIterator *si, streamID *current) {
  * iterator, since the stream iterator itself is supposed to be stack
  * allocated. */
 void streamIteratorStop(streamIterator *si) {
+    lpFree(si->decoded_lp);
+    si->decoded_lp = NULL;
     raxStop(&si->ri);
 }
 
@@ -5662,7 +6093,25 @@ void xinfoReplyWithStreamInfo(client *c, robj *key, kvobj *kv) {
         }
     }
 
-    addReplyMapLen(c,full ? 15 : 16);
+    int compression_info = s->compression || s->compression_dicts;
+    addReplyMapLen(c,(full ? 15 : 16) + compression_info);
+    if (compression_info) {
+        size_t count = 0, bytes = 0, refs = 0;
+        for (streamCompressionDict *d = s->compression_dicts; d; d = d->next) {
+            count++;
+            bytes += zmalloc_usable_size(d) + sdsAllocSize(d->bytes);
+            refs += d->refs;
+        }
+        addReplyBulkCString(c,"compression");
+        addReplyMapLen(c,7);
+        addReplyBulkCString(c,"enabled"); addReplyLongLong(c,s->compression);
+        addReplyBulkCString(c,"level"); addReplyLongLong(c,STREAM_COMPRESSION_LEVEL);
+        addReplyBulkCString(c,"dictionary-generations"); addReplyLongLong(c,count);
+        addReplyBulkCString(c,"dictionary-memory"); addReplyLongLong(c,bytes);
+        addReplyBulkCString(c,"dictionary-block-references"); addReplyLongLong(c,refs);
+        addReplyBulkCString(c,"compression-scratch-peak"); addReplyLongLong(c,s->compression_scratch_peak);
+        addReplyBulkCString(c,"decompression-scratch-peak"); addReplyLongLong(c,s->decompression_scratch_peak);
+    }
     addReplyBulkCString(c,"length");
     addReplyLongLong(c,s->length);
     addReplyBulkCString(c,"radix-tree-keys");
@@ -5998,12 +6447,31 @@ void xcfgsetCommand(client *c) {
     /* XCFGSET <key> [IDMP-DURATION <duration>] [IDMP-MAXSIZE <maxsize>] */
     long long duration = -1;
     long long maxsize = -1;
+    int compression = -1;
+    sds compression_dict = NULL;
 
     /* Parse parameters */
     for (int i = 2; i < c->argc; i++) {
         int moreargs = c->argc - i - 1;
         char *param = c->argv[i]->ptr;
-        if (!strcasecmp(param,"IDMP-DURATION") && moreargs) {
+        if (!strcasecmp(param,"COMPRESSION") && moreargs && compression == -1) {
+            char *mode = c->argv[++i]->ptr;
+            if (!strcasecmp(mode,"OFF")) compression = 0;
+            else if (!strcasecmp(mode,"ZSTD")) compression = 1;
+            else { addReplyErrorObject(c,shared.syntaxerr); return; }
+#ifndef USE_COMPRESSION
+            if (compression) {
+                addReplyError(c,"Stream compression requires BUILD_COMPRESSION=yes");
+                return;
+            }
+#endif
+        } else if (!strcasecmp(param,"DICTIONARY") && moreargs && !compression_dict) {
+            compression_dict = c->argv[++i]->ptr;
+            if (!streamCompressionDictValid((unsigned char*)compression_dict, sdslen(compression_dict))) {
+                addReplyError(c,"Invalid trained Zstd dictionary (maximum 65536 bytes)");
+                return;
+            }
+        } else if (!strcasecmp(param,"IDMP-DURATION") && moreargs) {
             if (duration != -1) {
                 addReplyError(c,"IDMP-DURATION specified multiple times");
                 return;
@@ -6038,13 +6506,35 @@ void xcfgsetCommand(client *c) {
     }
 
     /* At least one parameter must be specified */
-    if (duration == -1 && maxsize == -1) {
+    if (compression_dict && compression != 1) {
+        addReplyError(c,"DICTIONARY requires COMPRESSION ZSTD in the same command");
+        return;
+    }
+    if (duration == -1 && maxsize == -1 && compression == -1) {
         addReplyError(c,"At least one parameter must be specified");
         return;
     }
 
-    /* Track if we made any changes */
-    int changed = 0;
+    /* Track IDMP changes separately: compression must not untrack producers. */
+    int changed = 0, idmp_changed = 0;
+    if (compression != -1) {
+        const char *error = streamCompressionSetDictionary(s, compression_dict);
+        if (error) {
+            if (!(c->flags & CLIENT_MASTER) && !server.loading) {
+                addReplyError(c, error);
+                return;
+            }
+            /* Memory encodings can diverge after no-op trim materialization
+             * or RDB full sync. Never reject logical replication/AOF replay
+             * because its local dictionary registry has different references.
+             * Keep every referenced generation, and store future appends raw. */
+            streamCompressionSetDictionary(s, NULL);
+            compression = 0;
+            serverLog(LL_WARNING,"Stream compression disabled during replication/AOF replay: %s",error);
+        }
+        s->compression = compression;
+        changed = 1;
+    }
 
     /* Update the stream configuration. When we set IDMP-DURATION or IDMP-MAXSIZE to a
      * different value, we clear all existing producer IDMP maps for the stream.
@@ -6054,16 +6544,18 @@ void xcfgsetCommand(client *c) {
         s->idmp_duration = duration;
         streamClearIdmpEntries(s);
         changed = 1;
+        idmp_changed = 1;
     }
     if (maxsize != -1 && s->idmp_max_entries != (uint64_t)maxsize) {
         s->idmp_max_entries = maxsize;
         streamClearIdmpEntries(s);
         changed = 1;
+        idmp_changed = 1;
     }
 
     /* Clean up and propagate if we changed something */
     if (changed) {
-        dictDelete(c->db->stream_idmp_keys, key); /* Untrack cleared IDMP key */
+        if (idmp_changed) dictDelete(c->db->stream_idmp_keys, key);
         keyModified(c,c->db,key,kv,0);
         server.dirty++;
         if (server.memory_tracking_enabled)

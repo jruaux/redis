@@ -101,6 +101,7 @@ char *rdb_type_string[] = {
 #else
     "unused",
 #endif
+    "stream-plain-zstd-prototype",
 };
 
 /* Show a few stats collected into 'rdbstate' */
