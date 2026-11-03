@@ -68,7 +68,7 @@ XCFGSET events COMPRESSION OFF
 The level is fixed at 3. These compression options are prototype extensions,
 not upstream Redis command options.
 
-## Measured memory and producer cost
+## Results: memory, producer, and consumer cost
 
 The sustained experiment compared unmodified Redis, prototype OFF, and plain
 Zstd on identical initial corpora. Compression factor is **upstream stream
@@ -79,14 +79,14 @@ Redis process memory. Whole-process measurements are retained in the raw results
 All arrows show **upstream → Zstd**. Throughput is rounded; `k` means thousand.
 Exact bytes per entry and full measurements are in the [detailed report](STREAM-PLAIN-ZSTD.md#memory-savings-on-an-identical-corpus).
 
-| Workload | Memory factor | CPU/XADD, µs | Throughput, XADD/s |
-| --- | ---: | ---: | ---: |
-| ~258 B logs | 4.1× | 1.37 → 2.78 | **725k → 360k** |
-| ~702 B logs | 3.7× | 1.47 → 5.85 | **678k → 171k** |
-| Native fields | 3.0× | 1.83 → 2.11 | **545k → 473k** |
-| ~8 KiB repetitive | 29.8× | 4.94 → 20.96 | **202k → 48k** |
-| Already compressed | 1.0× | 2.11 → 4.58 | **459k → 217k** |
-| Mixed schemas | 2.8× | 1.42 → 4.58 | **701k → 218k** |
+| Workload | Memory factor | CPU/XADD, µs | XADD/s | Reads/s, 10 entries | Reads/s, large page |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ~258 B logs | 4.1× | 1.37 → 2.78 | **725k → 360k** | 181k → 78k | 2.9k → 1.6k |
+| ~702 B logs | 3.7× | 1.47 → 5.85 | **678k → 171k** | 163k → 48k | 2.2k → 700 |
+| Native fields | 3.0× | 1.83 → 2.11 | **545k → 473k** | 122k → 65k | 1.5k → 1.3k |
+| ~8 KiB repetitive | 29.8× | 4.94 → 20.96 | **202k → 48k** | 30k → 14k | 2.5k → 1.2k |
+| Already compressed | 1.0× | 2.11 → 4.58 | **459k → 217k** | 132k → 123k | 1.8k → 1.7k |
+| Mixed schemas | 2.8× | 1.42 → 4.58 | **701k → 218k** | 178k → 58k | 2.8k → 980 |
 
 Writes include approximate retention (`XADD MAXLEN ~ 10000`), so these are
 append-plus-retention costs, not isolated codec costs. For ~702-byte logs,
@@ -94,16 +94,13 @@ loaded XADD p99 increased from 58–59 to 222–237 µs. Prototype OFF was close
 upstream for append CPU, with roughly −3% to +3% variation; that does not prove
 zero overhead for every operation.
 
-## Consumer, trimming, and persistence cost
+Reads alternate `XRANGE` and `XREAD`; throughput counts requests, not entries.
+Large pages contain 1,000 entries, except ~8 KiB records (119) and already
+compressed values (901), to bound response size.
+For ~702-byte logs, ten-entry read CPU rose from 5.85 to 20.45 µs/request and
+XREAD p99 from 0.25–0.26 to 0.87–0.89 ms. Large-page read CPU rose from
+444 to 1,409 µs/request and XREAD p99 from 15–18 to 53–55 ms.
 
-For ~702-byte logs, alternating `XRANGE` and `XREAD` produced:
-
-| Read page | Requests/s, upstream → Zstd | Redis CPU/request, µs | XREAD p99, ms |
-| --- | ---: | ---: | ---: |
-| 10 entries | 163k → 48k | 5.85 → 20.45 | 0.25–0.26 → 0.87–0.89 |
-| 1,000 entries | 2.2k → 700 | 444 → 1,409 | 15–18 → 53–55 |
-
-Throughput is rounded; `k` means thousand requests or commands per second.
 CPU is averaged over both read commands. Latency ranges are the two runs'
 percentiles, not confidence intervals. Consumer-group delivery, pending rereads,
 claiming, and acknowledgment have correctness coverage; sustained group/ACK
