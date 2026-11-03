@@ -76,14 +76,27 @@ memory divided by compressed stream memory**: 4× means one quarter of the
 memory. It includes stream allocations and compression metadata, not total
 Redis process memory. Whole-process measurements are retained in the raw results.
 
-| Synthetic workload | Upstream → Zstd bytes/entry | Memory factor | Redis CPU/XADD, µs | XADD/s |
-| --- | ---: | ---: | ---: | ---: |
-| ~258-byte JSON logs | 274.2 → 67.5 | 4.1× | 1.37 → 2.78 | 725k → 360k |
-| ~702-byte JSON logs | 726.8 → 196.3 | 3.7× | 1.47 → 5.85 | 678k → 171k |
-| Native multi-field entries | 30.0 → 10.0 | 3.0× | 1.83 → 2.11 | 545k → 473k |
-| ~8 KiB repetitive records | 8,714.0 → 292.0 | 29.8× | 4.94 → 20.96 | 202k → 48k |
-| Already-compressed values | 1,068.2 → 1,068.2 | 1.0× | 2.11 → 4.58 | 459k → 217k |
-| Mixed schemas | 475.8 → 172.8 | 2.8× | 1.42 → 4.58 | 701k → 218k |
+| Synthetic workload | Upstream → Zstd bytes/entry | Memory factor | Redis CPU/XADD, µs |
+| --- | ---: | ---: | ---: |
+| ~258-byte JSON logs | 274.2 → 67.5 | 4.1× | 1.37 → 2.78 |
+| ~702-byte JSON logs | 726.8 → 196.3 | 3.7× | 1.47 → 5.85 |
+| Native multi-field entries | 30.0 → 10.0 | 3.0× | 1.83 → 2.11 |
+| ~8 KiB repetitive records | 8,714.0 → 292.0 | 29.8× | 4.94 → 20.96 |
+| Already-compressed values | 1,068.2 → 1,068.2 | 1.0× | 2.11 → 4.58 |
+| Mixed schemas | 475.8 → 172.8 | 2.8× | 1.42 → 4.58 |
+
+### XADD throughput
+
+Rounded operations per second; `k` means thousand.
+
+| Workload | Upstream XADD/s | Zstd XADD/s |
+| --- | ---: | ---: |
+| ~258-byte JSON logs | 725k | 360k |
+| ~702-byte JSON logs | 678k | 171k |
+| Native multi-field entries | 545k | 473k |
+| ~8 KiB repetitive records | 202k | 48k |
+| Already-compressed values | 459k | 217k |
+| Mixed schemas | 701k | 218k |
 
 Writes include approximate retention (`XADD MAXLEN ~ 10000`), so these are
 append-plus-retention costs, not isolated codec costs. For ~702-byte logs,
