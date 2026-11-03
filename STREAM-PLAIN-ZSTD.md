@@ -164,7 +164,8 @@ restart. These are not cold-disk recovery times.
 
 Full raw measurements, native/server hashes and a derived comparison summary:
 [stream-plain-results.json](stream-plain-results.json). CPU and throughput below
-pool counts/time from the two runs. Latency cells give the **range of the two
+pool counts/time from the two runs. Throughput is rounded (`k` = thousand
+operations/s); raw JSON retains full precision. Latency cells give the **range of the two
 per-run percentiles**, not a pooled percentile or confidence interval.
 
 ### Memory savings on an identical corpus
@@ -190,12 +191,12 @@ completed XADD; loaded p99 includes queuing at four clients/pipeline eight.
 
 | Workload | CPU µs/XADD upstream | OFF | Zstd | Extra CPU | XADD/s upstream → Zstd | p99 µs upstream → Zstd |
 |---|---:|---:|---:|---:|---|---|
-| korvet-244 | 1.37 | 1.36 | 2.78 | +102% | 725461 → 359899 | 59–64 → 106–109 |
-| korvet-700 | 1.47 | 1.51 | 5.85 | +297% | 678186 → 170593 | 58–59 → 222–237 |
-| native | 1.83 | 1.85 | 2.11 | +15% | 544630 → 473389 | 69–81 → 103–105 |
-| large | 4.94 | 4.96 | 20.96 | +324% | 202214 → 47579 | 179–195 → 692–736 |
-| entropy | 2.11 | 2.05 | 4.58 | +117% | 458675 → 217438 | 77–86 → 165–172 |
-| korvet-drift | 1.42 | 1.44 | 4.58 | +222% | 701221 → 217824 | 55–66 → 200–220 |
+| korvet-244 | 1.37 | 1.36 | 2.78 | +102% | 725k → 360k | 59–64 → 106–109 |
+| korvet-700 | 1.47 | 1.51 | 5.85 | +297% | 678k → 171k | 58–59 → 222–237 |
+| native | 1.83 | 1.85 | 2.11 | +15% | 545k → 473k | 69–81 → 103–105 |
+| large | 4.94 | 4.96 | 20.96 | +324% | 202k → 48k | 179–195 → 692–736 |
+| entropy | 2.11 | 2.05 | 4.58 | +117% | 459k → 217k | 77–86 → 165–172 |
+| korvet-drift | 1.42 | 1.44 | 4.58 | +222% | 701k → 218k | 55–66 → 200–220 |
 
 OFF is close to upstream for these append cases (approximately -3% to +3% CPU
 variation). Thus most measured extra CPU comes from enabled compression, not
@@ -216,18 +217,18 @@ client latency histograms are separate. Page size is the same across modes:
 
 | Workload | Page | CPU µs/op upstream / OFF / Zstd | Extra CPU | ops/s upstream → Zstd | XRANGE p99 µs upstream → Zstd | XREAD p99 µs upstream → Zstd |
 |---|---:|---|---:|---|---|---|
-| korvet-244 | 10 | 4.66 / 4.61 / 11.99 | +158% | 181205 → 77956 | 201–213 → 443–502 | 201–213 → 443–502 |
-| korvet-244 | 1000 | 303.06 / 280.97 / 595.54 | +97% | 2873 → 1568 | 11847–13583 → 21087–25423 | 11855–13655 → 21039–25471 |
-| korvet-700 | 10 | 5.85 / 5.95 / 20.45 | +250% | 163050 → 48175 | 248–255 → 881–884 | 247–255 → 871–888 |
-| korvet-700 | 1000 | 444.09 / 414.89 / 1408.80 | +217% | 2151 → 700 | 14775–18015 → 51775–53887 | 14951–18127 → 52991–54943 |
-| native | 10 | 7.81 / 7.81 / 15.23 | +95% | 121843 → 64820 | 313–322 → 572–583 | 312–322 → 571–582 |
-| native | 1000 | 456.91 / 459.41 / 537.90 | +18% | 1477 → 1319 | 23071–25519 → 26751–27247 | 23055–25471 → 27007–27295 |
-| large | 10 | 33.02 / 33.44 / 72.82 | +121% | 30016 → 13657 | 1423–1505 → 2641–3181 | 1428–1515 → 2653–3175 |
-| large | 119 | 401.90 / 413.66 / 850.83 | +112% | 2473 → 1170 | 13391–17775 → 30207–32015 | 13391–17519 → 30239–33023 |
-| entropy | 10 | 7.25 / 6.87 / 7.81 | +8% | 132380 → 122784 | 289–324 → 318–325 | 289–324 → 319–324 |
-| entropy | 901 | 531.58 / 539.03 / 569.84 | +7% | 1839 → 1715 | 18751–20975 → 20383–21759 | 18367–20815 → 20511–21647 |
-| korvet-drift | 10 | 5.19 / 5.13 / 16.89 | +225% | 178015 → 57709 | 229–257 → 729–863 | 229–258 → 730–868 |
-| korvet-drift | 1000 | 333.10 / 357.45 / 996.19 | +199% | 2799 → 980 | 14999–15335 → 43679–46431 | 14855–15135 → 45119–46271 |
+| korvet-244 | 10 | 4.66 / 4.61 / 11.99 | +158% | 181k → 78k | 201–213 → 443–502 | 201–213 → 443–502 |
+| korvet-244 | 1000 | 303.06 / 280.97 / 595.54 | +97% | 2.9k → 1.6k | 11847–13583 → 21087–25423 | 11855–13655 → 21039–25471 |
+| korvet-700 | 10 | 5.85 / 5.95 / 20.45 | +250% | 163k → 48k | 248–255 → 881–884 | 247–255 → 871–888 |
+| korvet-700 | 1000 | 444.09 / 414.89 / 1408.80 | +217% | 2.2k → 700 | 14775–18015 → 51775–53887 | 14951–18127 → 52991–54943 |
+| native | 10 | 7.81 / 7.81 / 15.23 | +95% | 122k → 65k | 313–322 → 572–583 | 312–322 → 571–582 |
+| native | 1000 | 456.91 / 459.41 / 537.90 | +18% | 1.5k → 1.3k | 23071–25519 → 26751–27247 | 23055–25471 → 27007–27295 |
+| large | 10 | 33.02 / 33.44 / 72.82 | +121% | 30k → 14k | 1423–1505 → 2641–3181 | 1428–1515 → 2653–3175 |
+| large | 119 | 401.90 / 413.66 / 850.83 | +112% | 2.5k → 1.2k | 13391–17775 → 30207–32015 | 13391–17519 → 30239–33023 |
+| entropy | 10 | 7.25 / 6.87 / 7.81 | +8% | 132k → 123k | 289–324 → 318–325 | 289–324 → 319–324 |
+| entropy | 901 | 531.58 / 539.03 / 569.84 | +7% | 1.8k → 1.7k | 18751–20975 → 20383–21759 | 18367–20815 → 20511–21647 |
+| korvet-drift | 10 | 5.19 / 5.13 / 16.89 | +225% | 178k → 58k | 229–257 → 729–863 | 229–258 → 730–868 |
+| korvet-drift | 1000 | 333.10 / 357.45 / 996.19 | +199% | 2.8k → 980 | 14999–15335 → 43679–46431 | 14855–15135 → 45119–46271 |
 
 For ~702-byte values, ten-entry pages cost about **3.5x process CPU** and
 large pages about **3.2x**. Native multi-field reads show the page-size tradeoff:

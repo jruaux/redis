@@ -78,12 +78,12 @@ Redis process memory. Whole-process measurements are retained in the raw results
 
 | Synthetic workload | Upstream → Zstd bytes/entry | Memory factor | Redis CPU/XADD, µs | XADD/s |
 | --- | ---: | ---: | ---: | ---: |
-| ~258-byte JSON logs | 274.2 → 67.5 | 4.1× | 1.37 → 2.78 | 725,461 → 359,899 |
-| ~702-byte JSON logs | 726.8 → 196.3 | 3.7× | 1.47 → 5.85 | 678,186 → 170,593 |
-| Native multi-field entries | 30.0 → 10.0 | 3.0× | 1.83 → 2.11 | 544,630 → 473,389 |
-| ~8 KiB repetitive records | 8,714.0 → 292.0 | 29.8× | 4.94 → 20.96 | 202,214 → 47,579 |
-| Already-compressed values | 1,068.2 → 1,068.2 | 1.0× | 2.11 → 4.58 | 458,675 → 217,438 |
-| Mixed schemas | 475.8 → 172.8 | 2.8× | 1.42 → 4.58 | 701,221 → 217,824 |
+| ~258-byte JSON logs | 274.2 → 67.5 | 4.1× | 1.37 → 2.78 | 725k → 360k |
+| ~702-byte JSON logs | 726.8 → 196.3 | 3.7× | 1.47 → 5.85 | 678k → 171k |
+| Native multi-field entries | 30.0 → 10.0 | 3.0× | 1.83 → 2.11 | 545k → 473k |
+| ~8 KiB repetitive records | 8,714.0 → 292.0 | 29.8× | 4.94 → 20.96 | 202k → 48k |
+| Already-compressed values | 1,068.2 → 1,068.2 | 1.0× | 2.11 → 4.58 | 459k → 217k |
+| Mixed schemas | 475.8 → 172.8 | 2.8× | 1.42 → 4.58 | 701k → 218k |
 
 Writes include approximate retention (`XADD MAXLEN ~ 10000`), so these are
 append-plus-retention costs, not isolated codec costs. For ~702-byte logs,
@@ -97,9 +97,10 @@ For ~702-byte logs, alternating `XRANGE` and `XREAD` produced:
 
 | Read page | Requests/s, upstream → Zstd | Redis CPU/request, µs | XREAD p99, ms |
 | --- | ---: | ---: | ---: |
-| 10 entries | 163,050 → 48,175 | 5.85 → 20.45 | 0.247–0.255 → 0.871–0.888 |
-| 1,000 entries | 2,151 → 700 | 444.09 → 1,408.80 | 14.951–18.127 → 52.991–54.943 |
+| 10 entries | 163k → 48k | 5.85 → 20.45 | 0.25–0.26 → 0.87–0.89 |
+| 1,000 entries | 2.2k → 700 | 444 → 1,409 | 15–18 → 53–55 |
 
+Throughput is rounded; `k` means thousand requests or commands per second.
 CPU is averaged over both read commands. Latency ranges are the two runs'
 percentiles, not confidence intervals. Consumer-group delivery, pending rereads,
 claiming, and acknowledgment have correctness coverage; sustained group/ACK
@@ -128,7 +129,7 @@ Bounds: six workloads, three modes, 10,000 retained entries, four clients,
 pipeline depth 8, five 5-second phases, two passes, and 256 MiB Redis maxmemory
 per process. At most two disposable servers ran during replication checks;
 timed load used one server. The run completed 180 phase measurements in
-939.1 seconds under a 20-minute limit. Maxmemory is not an OS RSS cap.
+about 939 seconds under a 20-minute limit. Maxmemory is not an OS RSS cap.
 
 Hardware: Apple M4 Max, 36 GiB RAM, macOS arm64, libc, Clang `-O2`;
 CPU placement was not pinned. Restart measurements used a warm filesystem.
