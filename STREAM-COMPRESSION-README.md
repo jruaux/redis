@@ -79,7 +79,7 @@ Redis process memory. Whole-process measurements are retained in the raw results
 All arrows show **upstream → Zstd**. Throughput is rounded; `k` means thousand.
 Exact bytes per entry and full measurements are in the [detailed report](STREAM-PLAIN-ZSTD.md#memory-savings-on-an-identical-corpus).
 
-| Workload | Memory factor | CPU/XADD, µs | XADD/s | Reads/s, 10 entries | Reads/s, large page |
+| Workload | Compression | CPU/XADD, µs | XADD/s | Reads/s, 10 entries | Reads/s, large page |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | ~258 B logs | 4.1× | 1.37 → 2.78 | **725k → 360k** | 181k → 78k | 2.9k → 1.6k |
 | ~702 B logs | 3.7× | 1.47 → 5.85 | **678k → 171k** | 163k → 48k | 2.2k → 700 |
