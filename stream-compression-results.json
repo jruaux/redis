@@ -1,0 +1,2203 @@
+{
+  "platform": "macOS-26.7.1-arm64-arm-64bit-Mach-O",
+  "entries_per_case": 5000,
+  "training_entries": 1000,
+  "concurrency": 1,
+  "maxmemory_per_server": 268435456,
+  "timeout_seconds": 900,
+  "baseline_server": "/private/tmp/redis-stream-compression/baseline/src/redis-server",
+  "server_sha256": "7288ec4a9b7fa9f0e4c695220c73b36d64fe4094c4992f43a9d60c434571e41c",
+  "baseline_sha256": "2870b1a4b638f7ca341ec81fa8e6b033250aad930a6abdb4402dd660fe843ec7",
+  "server_version": "Redis server v=255.255.255 sha=68d9a2df:1 malloc=libc bits=64 build=6e9033fd4d760f1e",
+  "correctness": {
+    "replication_full_sync_ms": 26.01066598435864,
+    "replication_full_sync_entries": 161,
+    "aof_no_rewrite_ms": 120.26891601271927,
+    "aof_no_bytes": 132961,
+    "aof_no_restart_ms": 51.93029099609703,
+    "aof_yes_rewrite_ms": 119.33720798697323,
+    "aof_yes_bytes": 6478,
+    "aof_yes_restart_ms": 44.17195898713544
+  },
+  "results": [
+    {
+      "workload": "small-json",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 5.087583,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 9851,
+          "used_memory_delta": 86912
+        },
+        "500": {
+          "stream_memory": 48056,
+          "used_memory_delta": 124192
+        },
+        "1000": {
+          "stream_memory": 95836,
+          "used_memory_delta": 173872
+        },
+        "2500": {
+          "stream_memory": 239123,
+          "used_memory_delta": 318784
+        },
+        "5000": {
+          "stream_memory": 477901,
+          "used_memory_delta": 558912
+        }
+      },
+      "training_sha256": "6894a968101f24751ad9868411d9230ecd4e9de6fc10f6c2ecf8c04c7cfd9597",
+      "dictionary_sha256": "5b5be4af3e8456ac1592aca18ebd35294af334e13e6dc73400d6a776e2ba4819",
+      "used_memory": 1581536,
+      "used_memory_delta": 558912,
+      "stream_memory": 477901,
+      "redis_peak_memory": 1581888,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 80523.34925845389,
+        "entries_s": 80523.34925845389,
+        "p50_us": 11.541,
+        "p95_us": 18.583,
+        "p99_us": 29.584
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 31959.511134533885,
+        "entries_s": 319595.1113453388,
+        "p50_us": 29.875,
+        "p95_us": 45.875,
+        "p99_us": 56.75
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 30365.85080710913,
+        "entries_s": 303658.5080710913,
+        "p50_us": 31.541,
+        "p95_us": 41.166,
+        "p99_us": 59.042
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 670.1289698942774,
+        "entries_s": 670128.9698942773,
+        "p50_us": 1474.042,
+        "p95_us": 1628.167,
+        "p99_us": 1628.167
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 682.2794957954526,
+        "entries_s": 682279.4957954526,
+        "p50_us": 1462.0,
+        "p95_us": 1504.75,
+        "p99_us": 1504.75
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 26655.421632793845,
+        "entries_s": 266554.2163279385,
+        "p50_us": 36.375,
+        "p95_us": 47.125,
+        "p99_us": 50.292
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 30579.52480641632,
+        "entries_s": 305795.2480641632,
+        "p50_us": 31.125,
+        "p95_us": 41.125,
+        "p99_us": 44.917
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 29789.974720227456,
+        "entries_s": 297899.74720227456,
+        "p50_us": 33.167,
+        "p95_us": 36.125,
+        "p99_us": 65.584
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 30553.81229082096,
+        "entries_s": 305538.1229082096,
+        "p50_us": 31.292,
+        "p95_us": 40.75,
+        "p99_us": 54.625
+      },
+      "save_us": 4959.083,
+      "rdb_bytes": 61127,
+      "restart_ms": 38.24054100550711,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 91251.19995327939,
+        "entries_s": 91251.19995327939,
+        "p50_us": 10.792,
+        "p95_us": 11.958,
+        "p99_us": 13.708
+      },
+      "trim_us": 30.834,
+      "delete_stream_us": 17.375,
+      "process_peak_rss_bytes": 7733248
+    },
+    {
+      "workload": "small-json",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 4.216458,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 2325,
+          "used_memory_delta": 104080
+        },
+        "500": {
+          "stream_memory": 6519,
+          "used_memory_delta": 107376
+        },
+        "1000": {
+          "stream_memory": 8951,
+          "used_memory_delta": 111744
+        },
+        "2500": {
+          "stream_memory": 19973,
+          "used_memory_delta": 124496
+        },
+        "5000": {
+          "stream_memory": 39569,
+          "used_memory_delta": 145616
+        }
+      },
+      "training_sha256": "6894a968101f24751ad9868411d9230ecd4e9de6fc10f6c2ecf8c04c7cfd9597",
+      "dictionary_sha256": "5b5be4af3e8456ac1592aca18ebd35294af334e13e6dc73400d6a776e2ba4819",
+      "used_memory": 1168192,
+      "used_memory_delta": 145616,
+      "stream_memory": 39569,
+      "redis_peak_memory": 1168544,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 74657.76791075918,
+        "entries_s": 74657.76791075918,
+        "p50_us": 12.333,
+        "p95_us": 20.0,
+        "p99_us": 27.667
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 35505.07207707157,
+        "entries_s": 355050.72077071574,
+        "p50_us": 25.75,
+        "p95_us": 36.041,
+        "p99_us": 72.333
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 37942.91715771125,
+        "entries_s": 379429.1715771125,
+        "p50_us": 26.042,
+        "p95_us": 30.333,
+        "p99_us": 36.583
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 670.3697893832197,
+        "entries_s": 670369.7893832196,
+        "p50_us": 1486.417,
+        "p95_us": 1685.334,
+        "p99_us": 1685.334
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 675.6451803391576,
+        "entries_s": 675645.1803391577,
+        "p50_us": 1483.291,
+        "p95_us": 1506.5,
+        "p99_us": 1506.5
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 24342.710307628564,
+        "entries_s": 243427.10307628565,
+        "p50_us": 39.542,
+        "p95_us": 53.042,
+        "p99_us": 71.375
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 20179.92420420469,
+        "entries_s": 201799.24204204688,
+        "p50_us": 45.75,
+        "p95_us": 60.042,
+        "p99_us": 78.208
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 14703.914623190132,
+        "entries_s": 147039.1462319013,
+        "p50_us": 65.334,
+        "p95_us": 85.125,
+        "p99_us": 99.209
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 30331.431552574988,
+        "entries_s": 303314.3155257499,
+        "p50_us": 32.375,
+        "p95_us": 36.583,
+        "p99_us": 53.084
+      },
+      "save_us": 6476.792,
+      "rdb_bytes": 61127,
+      "restart_ms": 27.327584044542164,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 71725.51506092366,
+        "entries_s": 71725.51506092366,
+        "p50_us": 13.125,
+        "p95_us": 21.25,
+        "p99_us": 27.625
+      },
+      "trim_us": 123.209,
+      "delete_stream_us": 17.5,
+      "process_peak_rss_bytes": 7733248
+    },
+    {
+      "workload": "small-json",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 194,
+      "training_ms": 4.701667,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 2853,
+          "used_memory_delta": 104560
+        },
+        "500": {
+          "stream_memory": 8415,
+          "used_memory_delta": 109008
+        },
+        "1000": {
+          "stream_memory": 12671,
+          "used_memory_delta": 114912
+        },
+        "2500": {
+          "stream_memory": 29013,
+          "used_memory_delta": 132144
+        },
+        "5000": {
+          "stream_memory": 57425,
+          "used_memory_delta": 160688
+        }
+      },
+      "training_sha256": "6894a968101f24751ad9868411d9230ecd4e9de6fc10f6c2ecf8c04c7cfd9597",
+      "dictionary_sha256": "5b5be4af3e8456ac1592aca18ebd35294af334e13e6dc73400d6a776e2ba4819",
+      "used_memory": 1183264,
+      "used_memory_delta": 160688,
+      "stream_memory": 57425,
+      "redis_peak_memory": 1183616,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 89424.49692414791,
+        "entries_s": 89424.49692414791,
+        "p50_us": 10.458,
+        "p95_us": 14.958,
+        "p99_us": 21.333
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 25667.07443092246,
+        "entries_s": 256670.7443092246,
+        "p50_us": 36.208,
+        "p95_us": 47.25,
+        "p99_us": 56.167
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 26941.433365079323,
+        "entries_s": 269414.33365079324,
+        "p50_us": 35.625,
+        "p95_us": 44.0,
+        "p99_us": 45.459
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 633.0092818150993,
+        "entries_s": 633009.2818150993,
+        "p50_us": 1574.583,
+        "p95_us": 1832.292,
+        "p99_us": 1832.292
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 626.5545078403898,
+        "entries_s": 626554.5078403897,
+        "p50_us": 1591.125,
+        "p95_us": 1648.541,
+        "p99_us": 1648.541
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 22390.168387500373,
+        "entries_s": 223901.68387500374,
+        "p50_us": 43.291,
+        "p95_us": 55.75,
+        "p99_us": 59.208
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 11299.971298072904,
+        "entries_s": 112999.71298072903,
+        "p50_us": 87.208,
+        "p95_us": 96.25,
+        "p99_us": 99.958
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 6604.911623640512,
+        "entries_s": 66049.11623640511,
+        "p50_us": 148.292,
+        "p95_us": 171.916,
+        "p99_us": 175.375
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 27148.756179735625,
+        "entries_s": 271487.5617973563,
+        "p50_us": 36.375,
+        "p95_us": 38.0,
+        "p99_us": 52.834
+      },
+      "save_us": 6891.917,
+      "rdb_bytes": 61127,
+      "restart_ms": 37.364832998719066,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 74331.03922969257,
+        "entries_s": 74331.03922969257,
+        "p50_us": 12.584,
+        "p95_us": 18.75,
+        "p99_us": 26.709
+      },
+      "trim_us": 376.666,
+      "delete_stream_us": 17.667,
+      "process_peak_rss_bytes": 7749632
+    },
+    {
+      "workload": "schema",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 4.269583,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 15201,
+          "used_memory_delta": 91056
+        },
+        "500": {
+          "stream_memory": 75337,
+          "used_memory_delta": 153152
+        },
+        "1000": {
+          "stream_memory": 150501,
+          "used_memory_delta": 231792
+        },
+        "2500": {
+          "stream_memory": 377342,
+          "used_memory_delta": 459440
+        },
+        "5000": {
+          "stream_memory": 755491,
+          "used_memory_delta": 844384
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 1867008,
+      "used_memory_delta": 844384,
+      "stream_memory": 755491,
+      "redis_peak_memory": 1867360,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 88849.57555354494,
+        "entries_s": 88849.57555354494,
+        "p50_us": 10.541,
+        "p95_us": 13.916,
+        "p99_us": 19.959
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 29407.77735724656,
+        "entries_s": 294077.7735724656,
+        "p50_us": 31.375,
+        "p95_us": 45.0,
+        "p99_us": 79.875
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 31917.046319932644,
+        "entries_s": 319170.4631993264,
+        "p50_us": 29.667,
+        "p95_us": 40.333,
+        "p99_us": 47.334
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 678.7368706836577,
+        "entries_s": 678736.8706836577,
+        "p50_us": 1479.125,
+        "p95_us": 1545.625,
+        "p99_us": 1545.625
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 670.4634265553132,
+        "entries_s": 670463.4265553132,
+        "p50_us": 1475.959,
+        "p95_us": 1662.125,
+        "p99_us": 1662.125
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 28628.046668296556,
+        "entries_s": 286280.4666829656,
+        "p50_us": 34.708,
+        "p95_us": 39.375,
+        "p99_us": 49.458
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 32543.290712470265,
+        "entries_s": 325432.90712470264,
+        "p50_us": 30.208,
+        "p95_us": 33.75,
+        "p99_us": 45.5
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 26923.901208667772,
+        "entries_s": 269239.0120866777,
+        "p50_us": 35.917,
+        "p95_us": 46.542,
+        "p99_us": 53.25
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 35653.87785837139,
+        "entries_s": 356538.77858371387,
+        "p50_us": 27.625,
+        "p95_us": 29.458,
+        "p99_us": 41.541
+      },
+      "save_us": 7331.833,
+      "rdb_bytes": 233446,
+      "restart_ms": 39.77195802144706,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 80542.46964152963,
+        "entries_s": 80542.46964152963,
+        "p50_us": 12.0,
+        "p95_us": 15.708,
+        "p99_us": 20.291
+      },
+      "trim_us": 39.125,
+      "delete_stream_us": 23.916,
+      "process_peak_rss_bytes": 8454144
+    },
+    {
+      "workload": "schema",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 4.299625,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 5378,
+          "used_memory_delta": 105792
+        },
+        "500": {
+          "stream_memory": 15934,
+          "used_memory_delta": 117968
+        },
+        "1000": {
+          "stream_memory": 28355,
+          "used_memory_delta": 133376
+        },
+        "2500": {
+          "stream_memory": 72088,
+          "used_memory_delta": 177984
+        },
+        "5000": {
+          "stream_memory": 140829,
+          "used_memory_delta": 253424
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 1275968,
+      "used_memory_delta": 253424,
+      "stream_memory": 140829,
+      "redis_peak_memory": 1276320,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 86639.55346053871,
+        "entries_s": 86639.55346053871,
+        "p50_us": 10.625,
+        "p95_us": 17.042,
+        "p99_us": 23.0
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 29253.306428092303,
+        "entries_s": 292533.064280923,
+        "p50_us": 32.791,
+        "p95_us": 39.875,
+        "p99_us": 44.0
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 28226.652113004835,
+        "entries_s": 282266.5211300484,
+        "p50_us": 35.083,
+        "p95_us": 42.375,
+        "p99_us": 52.292
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 610.781341216376,
+        "entries_s": 610781.3412163759,
+        "p50_us": 1640.666,
+        "p95_us": 1696.5,
+        "p99_us": 1696.5
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 574.5612985085346,
+        "entries_s": 574561.2985085347,
+        "p50_us": 1727.125,
+        "p95_us": 1848.292,
+        "p99_us": 1848.292
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 20715.694085545045,
+        "entries_s": 207156.94085545046,
+        "p50_us": 48.542,
+        "p95_us": 59.708,
+        "p99_us": 61.458
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 11905.595296432655,
+        "entries_s": 119055.95296432654,
+        "p50_us": 82.041,
+        "p95_us": 98.458,
+        "p99_us": 103.375
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 7558.914938925479,
+        "entries_s": 75589.14938925479,
+        "p50_us": 131.542,
+        "p95_us": 152.125,
+        "p99_us": 160.625
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 23898.688678952185,
+        "entries_s": 238986.88678952187,
+        "p50_us": 41.167,
+        "p95_us": 50.791,
+        "p99_us": 55.375
+      },
+      "save_us": 7577.75,
+      "rdb_bytes": 233446,
+      "restart_ms": 38.08649996062741,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 68197.47260166539,
+        "entries_s": 68197.47260166539,
+        "p50_us": 13.791,
+        "p95_us": 20.333,
+        "p99_us": 24.791
+      },
+      "trim_us": 433.541,
+      "delete_stream_us": 21.417,
+      "process_peak_rss_bytes": 8290304
+    },
+    {
+      "workload": "schema",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 1024,
+      "training_ms": 3.988417,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 9575,
+          "used_memory_delta": 110144
+        },
+        "500": {
+          "stream_memory": 34684,
+          "used_memory_delta": 137680
+        },
+        "1000": {
+          "stream_memory": 65526,
+          "used_memory_delta": 172544
+        },
+        "2500": {
+          "stream_memory": 162766,
+          "used_memory_delta": 273472
+        },
+        "5000": {
+          "stream_memory": 321812,
+          "used_memory_delta": 444144
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 1466720,
+      "used_memory_delta": 444144,
+      "stream_memory": 321812,
+      "redis_peak_memory": 1467072,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 77803.89381485191,
+        "entries_s": 77803.89381485191,
+        "p50_us": 11.75,
+        "p95_us": 21.833,
+        "p99_us": 30.125
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 25981.057730429897,
+        "entries_s": 259810.577304299,
+        "p50_us": 35.5,
+        "p95_us": 47.875,
+        "p99_us": 51.333
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 24703.020290072745,
+        "entries_s": 247030.20290072745,
+        "p50_us": 39.375,
+        "p95_us": 51.75,
+        "p99_us": 55.666
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 579.0602323398114,
+        "entries_s": 579060.2323398114,
+        "p50_us": 1716.916,
+        "p95_us": 1929.459,
+        "p99_us": 1929.459
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 575.3013687455104,
+        "entries_s": 575301.3687455105,
+        "p50_us": 1736.167,
+        "p95_us": 1835.75,
+        "p99_us": 1835.75
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 21707.692033841424,
+        "entries_s": 217076.92033841423,
+        "p50_us": 45.666,
+        "p95_us": 55.041,
+        "p99_us": 62.25
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 9992.665383608432,
+        "entries_s": 99926.65383608431,
+        "p50_us": 98.125,
+        "p95_us": 113.625,
+        "p99_us": 117.167
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 5952.322137769353,
+        "entries_s": 59523.221377693524,
+        "p50_us": 163.791,
+        "p95_us": 188.208,
+        "p99_us": 194.125
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 25516.70042526133,
+        "entries_s": 255167.0042526133,
+        "p50_us": 38.125,
+        "p95_us": 42.459,
+        "p99_us": 60.709
+      },
+      "save_us": 8859.458,
+      "rdb_bytes": 233446,
+      "restart_ms": 26.92279196344316,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 83851.32489285897,
+        "entries_s": 83851.32489285897,
+        "p50_us": 10.75,
+        "p95_us": 20.75,
+        "p99_us": 25.459
+      },
+      "trim_us": 611.166,
+      "delete_stream_us": 18.5,
+      "process_peak_rss_bytes": 8519680
+    },
+    {
+      "workload": "native",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 3.203584,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 3181,
+          "used_memory_delta": 78656
+        },
+        "500": {
+          "stream_memory": 15247,
+          "used_memory_delta": 95296
+        },
+        "1000": {
+          "stream_memory": 30272,
+          "used_memory_delta": 116016
+        },
+        "2500": {
+          "stream_memory": 75173,
+          "used_memory_delta": 178144
+        },
+        "5000": {
+          "stream_memory": 150146,
+          "used_memory_delta": 281760
+        }
+      },
+      "training_sha256": "da0f660ccd58e37e37c448bc119676e6fdfe65b44ce17d0d4d51266617ee02c5",
+      "dictionary_sha256": "279f752fa80cb80b4385002944c5080509d31b98fe20dae8ad1810e8ad5b1f1c",
+      "used_memory": 1304384,
+      "used_memory_delta": 281760,
+      "stream_memory": 150146,
+      "redis_peak_memory": 1304736,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 76259.28192466161,
+        "entries_s": 76259.28192466161,
+        "p50_us": 12.125,
+        "p95_us": 18.625,
+        "p99_us": 28.416
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 20655.12265631487,
+        "entries_s": 206551.22656314872,
+        "p50_us": 46.541,
+        "p95_us": 59.167,
+        "p99_us": 61.917
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 20398.11823279679,
+        "entries_s": 203981.1823279679,
+        "p50_us": 47.708,
+        "p95_us": 56.5,
+        "p99_us": 67.708
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 284.0707336126695,
+        "entries_s": 284070.7336126696,
+        "p50_us": 3513.083,
+        "p95_us": 3964.875,
+        "p99_us": 3964.875
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 283.9042904127395,
+        "entries_s": 283904.2904127395,
+        "p50_us": 3519.708,
+        "p95_us": 3571.25,
+        "p99_us": 3571.25
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 16048.345319307506,
+        "entries_s": 160483.45319307505,
+        "p50_us": 62.291,
+        "p95_us": 72.958,
+        "p99_us": 79.75
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 19323.99263060217,
+        "entries_s": 193239.92630602172,
+        "p50_us": 49.459,
+        "p95_us": 60.417,
+        "p99_us": 65.75
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 17755.139580254294,
+        "entries_s": 177551.39580254295,
+        "p50_us": 55.459,
+        "p95_us": 65.084,
+        "p99_us": 80.125
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 19463.12147206594,
+        "entries_s": 194631.21472065942,
+        "p50_us": 48.459,
+        "p95_us": 61.833,
+        "p99_us": 83.833
+      },
+      "save_us": 6788.959,
+      "rdb_bytes": 96828,
+      "restart_ms": 39.75887497654185,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 64822.76160521901,
+        "entries_s": 64822.76160521901,
+        "p50_us": 14.958,
+        "p95_us": 20.625,
+        "p99_us": 23.667
+      },
+      "trim_us": 25.792,
+      "delete_stream_us": 16.458,
+      "process_peak_rss_bytes": 7503872
+    },
+    {
+      "workload": "native",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 3.409917,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 3213,
+          "used_memory_delta": 103376
+        },
+        "500": {
+          "stream_memory": 7260,
+          "used_memory_delta": 107728
+        },
+        "1000": {
+          "stream_memory": 12247,
+          "used_memory_delta": 113088
+        },
+        "2500": {
+          "stream_memory": 27102,
+          "used_memory_delta": 129136
+        },
+        "5000": {
+          "stream_memory": 52027,
+          "used_memory_delta": 155952
+        }
+      },
+      "training_sha256": "da0f660ccd58e37e37c448bc119676e6fdfe65b44ce17d0d4d51266617ee02c5",
+      "dictionary_sha256": "279f752fa80cb80b4385002944c5080509d31b98fe20dae8ad1810e8ad5b1f1c",
+      "used_memory": 1178496,
+      "used_memory_delta": 155952,
+      "stream_memory": 52027,
+      "redis_peak_memory": 1178848,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 63038.82177554346,
+        "entries_s": 63038.82177554346,
+        "p50_us": 14.5,
+        "p95_us": 22.208,
+        "p99_us": 40.166
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 14217.921206271183,
+        "entries_s": 142179.21206271183,
+        "p50_us": 68.958,
+        "p95_us": 84.708,
+        "p99_us": 103.042
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 14959.236827606614,
+        "entries_s": 149592.36827606615,
+        "p50_us": 65.375,
+        "p95_us": 78.584,
+        "p99_us": 83.458
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 265.39983422772485,
+        "entries_s": 265399.8342277249,
+        "p50_us": 3742.875,
+        "p95_us": 4310.792,
+        "p99_us": 4310.792
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 267.09937239838536,
+        "entries_s": 267099.37239838537,
+        "p50_us": 3770.416,
+        "p95_us": 4309.083,
+        "p99_us": 4309.083
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 13972.170789109085,
+        "entries_s": 139721.70789109083,
+        "p50_us": 68.667,
+        "p95_us": 95.334,
+        "p99_us": 105.334
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 7584.377335514196,
+        "entries_s": 75843.77335514197,
+        "p50_us": 130.833,
+        "p95_us": 151.792,
+        "p99_us": 171.791
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 4926.370467000215,
+        "entries_s": 49263.70467000215,
+        "p50_us": 201.125,
+        "p95_us": 225.208,
+        "p99_us": 236.292
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 11956.353570418258,
+        "entries_s": 119563.53570418258,
+        "p50_us": 81.25,
+        "p95_us": 102.959,
+        "p99_us": 148.584
+      },
+      "save_us": 6746.958,
+      "rdb_bytes": 96828,
+      "restart_ms": 26.43120801076293,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 56039.48766458798,
+        "entries_s": 56039.48766458798,
+        "p50_us": 17.542,
+        "p95_us": 23.75,
+        "p99_us": 32.333
+      },
+      "trim_us": 203.125,
+      "delete_stream_us": 21.083,
+      "process_peak_rss_bytes": 7880704
+    },
+    {
+      "workload": "native",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 1024,
+      "training_ms": 3.451542,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 4493,
+          "used_memory_delta": 104656
+        },
+        "500": {
+          "stream_memory": 16559,
+          "used_memory_delta": 121296
+        },
+        "1000": {
+          "stream_memory": 31584,
+          "used_memory_delta": 142016
+        },
+        "2500": {
+          "stream_memory": 76485,
+          "used_memory_delta": 204144
+        },
+        "5000": {
+          "stream_memory": 151458,
+          "used_memory_delta": 307760
+        }
+      },
+      "training_sha256": "da0f660ccd58e37e37c448bc119676e6fdfe65b44ce17d0d4d51266617ee02c5",
+      "dictionary_sha256": "279f752fa80cb80b4385002944c5080509d31b98fe20dae8ad1810e8ad5b1f1c",
+      "used_memory": 1330336,
+      "used_memory_delta": 307760,
+      "stream_memory": 151458,
+      "redis_peak_memory": 1333056,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 73300.56475013231,
+        "entries_s": 73300.56475013231,
+        "p50_us": 12.625,
+        "p95_us": 20.75,
+        "p99_us": 32.625
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 20005.977786162504,
+        "entries_s": 200059.77786162504,
+        "p50_us": 48.75,
+        "p95_us": 60.291,
+        "p99_us": 75.209
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 19988.163009865555,
+        "entries_s": 199881.63009865556,
+        "p50_us": 48.334,
+        "p95_us": 57.166,
+        "p99_us": 62.292
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 281.8429764842997,
+        "entries_s": 281842.9764842997,
+        "p50_us": 3543.667,
+        "p95_us": 3706.084,
+        "p99_us": 3706.084
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 279.41091387225634,
+        "entries_s": 279410.91387225635,
+        "p50_us": 3548.459,
+        "p95_us": 3794.042,
+        "p99_us": 3794.042
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 16845.873064324955,
+        "entries_s": 168458.73064324955,
+        "p50_us": 56.333,
+        "p95_us": 71.375,
+        "p99_us": 89.584
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 19471.026722815914,
+        "entries_s": 194710.26722815915,
+        "p50_us": 48.5,
+        "p95_us": 62.791,
+        "p99_us": 89.667
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 17508.53541101287,
+        "entries_s": 175085.35411012868,
+        "p50_us": 54.667,
+        "p95_us": 73.708,
+        "p99_us": 75.333
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 20853.300368436114,
+        "entries_s": 208533.00368436112,
+        "p50_us": 47.083,
+        "p95_us": 52.917,
+        "p99_us": 62.083
+      },
+      "save_us": 6338.666,
+      "rdb_bytes": 96828,
+      "restart_ms": 39.62408396182582,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 69278.17682007626,
+        "entries_s": 69278.17682007626,
+        "p50_us": 14.708,
+        "p95_us": 18.333,
+        "p99_us": 18.5
+      },
+      "trim_us": 22.583,
+      "delete_stream_us": 14.083,
+      "process_peak_rss_bytes": 7929856
+    },
+    {
+      "workload": "large",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 26.039,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 871265,
+          "used_memory_delta": 1131392
+        },
+        "500": {
+          "stream_memory": 4355758,
+          "used_memory_delta": 5244320
+        },
+        "1000": {
+          "stream_memory": 8711343,
+          "used_memory_delta": 10385456
+        },
+        "2500": {
+          "stream_memory": 21778801,
+          "used_memory_delta": 25808096
+        },
+        "5000": {
+          "stream_memory": 43558665,
+          "used_memory_delta": 51513280
+        }
+      },
+      "training_sha256": "19dfeab8cab8ab52b8575213d9e92a8a85bd897d93da0185e48ee247bd17a068",
+      "dictionary_sha256": "d50e9b52dea5d79b8f4ccc16a669d3aafdb8b7ff8665c211209c81cf6b5bf853",
+      "used_memory": 52535872,
+      "used_memory_delta": 51513280,
+      "stream_memory": 43558665,
+      "redis_peak_memory": 52536224,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 36168.625323016975,
+        "entries_s": 36168.625323016975,
+        "p50_us": 26.541,
+        "p95_us": 36.5,
+        "p99_us": 55.25
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 7929.50794310705,
+        "entries_s": 79295.0794310705,
+        "p50_us": 123.583,
+        "p95_us": 163.708,
+        "p99_us": 218.0
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 7337.275015301887,
+        "entries_s": 73372.75015301887,
+        "p50_us": 137.0,
+        "p95_us": 173.375,
+        "p99_us": 196.5
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 97.44003399020193,
+        "entries_s": 97440.03399020193,
+        "p50_us": 10314.833,
+        "p95_us": 14985.208,
+        "p99_us": 14985.208
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 95.56613159741745,
+        "entries_s": 95566.13159741745,
+        "p50_us": 9925.833,
+        "p95_us": 12278.375,
+        "p99_us": 12278.375
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 8689.987813161091,
+        "entries_s": 86899.87813161091,
+        "p50_us": 114.375,
+        "p95_us": 138.834,
+        "p99_us": 154.916
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 9236.73189646732,
+        "entries_s": 92367.31896467319,
+        "p50_us": 108.375,
+        "p95_us": 128.959,
+        "p99_us": 166.125
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 7911.3899014588915,
+        "entries_s": 79113.89901458891,
+        "p50_us": 119.5,
+        "p95_us": 152.791,
+        "p99_us": 175.5
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 9065.15580736544,
+        "entries_s": 90651.55807365439,
+        "p50_us": 107.709,
+        "p95_us": 128.0,
+        "p99_us": 199.0
+      },
+      "save_us": 27566.959,
+      "rdb_bytes": 1782861,
+      "restart_ms": 29.30808300152421,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 72115.47129263377,
+        "entries_s": 72115.47129263377,
+        "p50_us": 12.5,
+        "p95_us": 20.5,
+        "p99_us": 27.5
+      },
+      "trim_us": 528.625,
+      "delete_stream_us": 305.166,
+      "process_peak_rss_bytes": 108429312
+    },
+    {
+      "workload": "large",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 27.550083,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 37570,
+          "used_memory_delta": 167696
+        },
+        "500": {
+          "stream_memory": 153520,
+          "used_memory_delta": 287024
+        },
+        "1000": {
+          "stream_memory": 298393,
+          "used_memory_delta": 436160
+        },
+        "2500": {
+          "stream_memory": 733648,
+          "used_memory_delta": 882800
+        },
+        "5000": {
+          "stream_memory": 1460329,
+          "used_memory_delta": 1627984
+        }
+      },
+      "training_sha256": "19dfeab8cab8ab52b8575213d9e92a8a85bd897d93da0185e48ee247bd17a068",
+      "dictionary_sha256": "d50e9b52dea5d79b8f4ccc16a669d3aafdb8b7ff8665c211209c81cf6b5bf853",
+      "used_memory": 2650528,
+      "used_memory_delta": 1627984,
+      "stream_memory": 1460329,
+      "redis_peak_memory": 2650880,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 28480.41527920783,
+        "entries_s": 28480.41527920783,
+        "p50_us": 33.542,
+        "p95_us": 48.75,
+        "p99_us": 66.166
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 5425.654534686101,
+        "entries_s": 54256.545346861014,
+        "p50_us": 177.25,
+        "p95_us": 248.25,
+        "p99_us": 270.417
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 6120.667990118304,
+        "entries_s": 61206.679901183044,
+        "p50_us": 164.459,
+        "p95_us": 241.041,
+        "p99_us": 252.208
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 91.83146394266953,
+        "entries_s": 91831.46394266954,
+        "p50_us": 9682.833,
+        "p95_us": 16079.083,
+        "p99_us": 16079.083
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 108.58899653364377,
+        "entries_s": 108588.99653364376,
+        "p50_us": 9074.208,
+        "p95_us": 10997.042,
+        "p99_us": 10997.042
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 9279.08729412721,
+        "entries_s": 92790.8729412721,
+        "p50_us": 104.375,
+        "p95_us": 137.209,
+        "p99_us": 145.959
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 10008.755659450888,
+        "entries_s": 100087.55659450887,
+        "p50_us": 99.25,
+        "p95_us": 114.125,
+        "p99_us": 115.375
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 4960.212154226091,
+        "entries_s": 49602.12154226091,
+        "p50_us": 202.042,
+        "p95_us": 236.334,
+        "p99_us": 270.667
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 6643.709549774406,
+        "entries_s": 66437.09549774406,
+        "p50_us": 159.958,
+        "p95_us": 190.292,
+        "p99_us": 194.083
+      },
+      "save_us": 50467.791,
+      "rdb_bytes": 1782861,
+      "restart_ms": 45.1377080171369,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 39328.18029296348,
+        "entries_s": 39328.18029296348,
+        "p50_us": 25.167,
+        "p95_us": 35.458,
+        "p99_us": 52.041
+      },
+      "trim_us": 8638.917,
+      "delete_stream_us": 156.833,
+      "process_peak_rss_bytes": 109887488
+    },
+    {
+      "workload": "large",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 1024,
+      "training_ms": 27.500584,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 132045,
+          "used_memory_delta": 270352
+        },
+        "500": {
+          "stream_memory": 624467,
+          "used_memory_delta": 799280
+        },
+        "1000": {
+          "stream_memory": 1239959,
+          "used_memory_delta": 1460416
+        },
+        "2500": {
+          "stream_memory": 3087169,
+          "used_memory_delta": 3443056
+        },
+        "5000": {
+          "stream_memory": 6166559,
+          "used_memory_delta": 6748240
+        }
+      },
+      "training_sha256": "19dfeab8cab8ab52b8575213d9e92a8a85bd897d93da0185e48ee247bd17a068",
+      "dictionary_sha256": "d50e9b52dea5d79b8f4ccc16a669d3aafdb8b7ff8665c211209c81cf6b5bf853",
+      "used_memory": 7770816,
+      "used_memory_delta": 6748240,
+      "stream_memory": 6166559,
+      "redis_peak_memory": 7771168,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 32418.56790045701,
+        "entries_s": 32418.56790045701,
+        "p50_us": 29.0,
+        "p95_us": 41.834,
+        "p99_us": 52.166
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 8271.841155503416,
+        "entries_s": 82718.41155503417,
+        "p50_us": 113.5,
+        "p95_us": 173.25,
+        "p99_us": 227.917
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 7385.364010559889,
+        "entries_s": 73853.64010559888,
+        "p50_us": 117.541,
+        "p95_us": 211.333,
+        "p99_us": 426.042
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 79.55630536253679,
+        "entries_s": 79556.30536253679,
+        "p50_us": 11288.541,
+        "p95_us": 18048.333,
+        "p99_us": 18048.333
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 66.70447743265458,
+        "entries_s": 66704.47743265459,
+        "p50_us": 15708.667,
+        "p95_us": 20664.75,
+        "p99_us": 20664.75
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 5339.69141068987,
+        "entries_s": 53396.9141068987,
+        "p50_us": 191.084,
+        "p95_us": 215.416,
+        "p99_us": 223.042
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 5467.515793739497,
+        "entries_s": 54675.15793739497,
+        "p50_us": 185.334,
+        "p95_us": 198.875,
+        "p99_us": 206.542
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 4270.857436984993,
+        "entries_s": 42708.574369849935,
+        "p50_us": 232.958,
+        "p95_us": 261.917,
+        "p99_us": 298.167
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 5425.127650541053,
+        "entries_s": 54251.27650541053,
+        "p50_us": 185.958,
+        "p95_us": 202.042,
+        "p99_us": 233.417
+      },
+      "save_us": 49511.25,
+      "rdb_bytes": 1782861,
+      "restart_ms": 42.57716698339209,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 38663.51069316715,
+        "entries_s": 38663.51069316715,
+        "p50_us": 23.833,
+        "p95_us": 35.125,
+        "p99_us": 47.875
+      },
+      "trim_us": 12545.166,
+      "delete_stream_us": 1891.042,
+      "process_peak_rss_bytes": 115146752
+    },
+    {
+      "workload": "entropy",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 18.409709,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 107082,
+          "used_memory_delta": 215168
+        },
+        "500": {
+          "stream_memory": 534307,
+          "used_memory_delta": 765568
+        },
+        "1000": {
+          "stream_memory": 1068466,
+          "used_memory_delta": 1456752
+        },
+        "2500": {
+          "stream_memory": 2670762,
+          "used_memory_delta": 3526048
+        },
+        "5000": {
+          "stream_memory": 5341275,
+          "used_memory_delta": 6973536
+        }
+      },
+      "training_sha256": "79b42081d8d57f30d5f1c13fb155f45fafbb230c2a7a0b71ee7cf3566a90295b",
+      "dictionary_sha256": "c5f4011c00b5cf6f83b68ff6c5982e9166ea70f4b9e187a410ca81c626073fa3",
+      "used_memory": 7996160,
+      "used_memory_delta": 6973536,
+      "stream_memory": 5341275,
+      "redis_peak_memory": 7996512,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 78538.56740908368,
+        "entries_s": 78538.56740908368,
+        "p50_us": 11.666,
+        "p95_us": 18.084,
+        "p99_us": 26.75
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 27576.020884975176,
+        "entries_s": 275760.2088497518,
+        "p50_us": 32.667,
+        "p95_us": 52.292,
+        "p99_us": 86.0
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 27804.508723525592,
+        "entries_s": 278045.0872352559,
+        "p50_us": 34.708,
+        "p95_us": 46.625,
+        "p99_us": 50.625
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 519.5398054946876,
+        "entries_s": 519539.8054946876,
+        "p50_us": 1901.833,
+        "p95_us": 2171.167,
+        "p99_us": 2171.167
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 517.6660618371437,
+        "entries_s": 517666.06183714373,
+        "p50_us": 1942.75,
+        "p95_us": 2004.375,
+        "p99_us": 2004.375
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 24183.282193752588,
+        "entries_s": 241832.82193752588,
+        "p50_us": 40.042,
+        "p95_us": 55.584,
+        "p99_us": 58.292
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 29772.254164542912,
+        "entries_s": 297722.54164542916,
+        "p50_us": 32.917,
+        "p95_us": 38.0,
+        "p99_us": 38.625
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 24883.953682003976,
+        "entries_s": 248839.53682003974,
+        "p50_us": 39.416,
+        "p95_us": 50.459,
+        "p99_us": 55.917
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 24780.55578821744,
+        "entries_s": 247805.5578821744,
+        "p50_us": 39.375,
+        "p95_us": 50.917,
+        "p99_us": 52.917
+      },
+      "save_us": 27538.0,
+      "rdb_bytes": 5322363,
+      "restart_ms": 42.959249985869974,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 78046.28300674866,
+        "entries_s": 78046.28300674866,
+        "p50_us": 11.458,
+        "p95_us": 19.375,
+        "p99_us": 23.083
+      },
+      "trim_us": 201.042,
+      "delete_stream_us": 81.625,
+      "process_peak_rss_bytes": 25706496
+    },
+    {
+      "workload": "entropy",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 17.509208,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 107114,
+          "used_memory_delta": 239888
+        },
+        "500": {
+          "stream_memory": 534339,
+          "used_memory_delta": 790288
+        },
+        "1000": {
+          "stream_memory": 1068498,
+          "used_memory_delta": 1481472
+        },
+        "2500": {
+          "stream_memory": 2670794,
+          "used_memory_delta": 3550768
+        },
+        "5000": {
+          "stream_memory": 5341307,
+          "used_memory_delta": 6998256
+        }
+      },
+      "training_sha256": "79b42081d8d57f30d5f1c13fb155f45fafbb230c2a7a0b71ee7cf3566a90295b",
+      "dictionary_sha256": "c5f4011c00b5cf6f83b68ff6c5982e9166ea70f4b9e187a410ca81c626073fa3",
+      "used_memory": 8020800,
+      "used_memory_delta": 6998256,
+      "stream_memory": 5341307,
+      "redis_peak_memory": 8021152,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 69566.63272017238,
+        "entries_s": 69566.63272017238,
+        "p50_us": 12.459,
+        "p95_us": 22.125,
+        "p99_us": 26.292
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 29619.677418017174,
+        "entries_s": 296196.7741801718,
+        "p50_us": 31.916,
+        "p95_us": 38.0,
+        "p99_us": 58.875
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 29348.0363082166,
+        "entries_s": 293480.363082166,
+        "p50_us": 32.458,
+        "p95_us": 41.667,
+        "p99_us": 51.417
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 515.1835762223546,
+        "entries_s": 515183.5762223546,
+        "p50_us": 1922.875,
+        "p95_us": 2127.208,
+        "p99_us": 2127.208
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 510.41024223219415,
+        "entries_s": 510410.2422321941,
+        "p50_us": 1964.959,
+        "p95_us": 2062.833,
+        "p99_us": 2062.833
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 22856.223383927867,
+        "entries_s": 228562.23383927866,
+        "p50_us": 43.208,
+        "p95_us": 52.709,
+        "p99_us": 55.291
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 29503.659929014197,
+        "entries_s": 295036.59929014195,
+        "p50_us": 33.292,
+        "p95_us": 38.709,
+        "p99_us": 40.542
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 22906.883518497307,
+        "entries_s": 229068.83518497308,
+        "p50_us": 43.125,
+        "p95_us": 52.541,
+        "p99_us": 57.666
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 24079.96474693161,
+        "entries_s": 240799.6474693161,
+        "p50_us": 40.958,
+        "p95_us": 52.166,
+        "p99_us": 54.292
+      },
+      "save_us": 28663.042,
+      "rdb_bytes": 5322363,
+      "restart_ms": 31.192541995551437,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 92864.91034357231,
+        "entries_s": 92864.91034357231,
+        "p50_us": 10.291,
+        "p95_us": 13.917,
+        "p99_us": 18.584
+      },
+      "trim_us": 181.125,
+      "delete_stream_us": 74.959,
+      "process_peak_rss_bytes": 25952256
+    },
+    {
+      "workload": "entropy",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 1024,
+      "training_ms": 17.973209,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 108394,
+          "used_memory_delta": 241168
+        },
+        "500": {
+          "stream_memory": 535619,
+          "used_memory_delta": 791568
+        },
+        "1000": {
+          "stream_memory": 1069778,
+          "used_memory_delta": 1482752
+        },
+        "2500": {
+          "stream_memory": 2672074,
+          "used_memory_delta": 3552048
+        },
+        "5000": {
+          "stream_memory": 5342587,
+          "used_memory_delta": 6999536
+        }
+      },
+      "training_sha256": "79b42081d8d57f30d5f1c13fb155f45fafbb230c2a7a0b71ee7cf3566a90295b",
+      "dictionary_sha256": "c5f4011c00b5cf6f83b68ff6c5982e9166ea70f4b9e187a410ca81c626073fa3",
+      "used_memory": 8022112,
+      "used_memory_delta": 6999536,
+      "stream_memory": 5342587,
+      "redis_peak_memory": 8022464,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 57797.35984342569,
+        "entries_s": 57797.35984342569,
+        "p50_us": 12.375,
+        "p95_us": 30.667,
+        "p99_us": 37.459
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 28146.84547044075,
+        "entries_s": 281468.4547044075,
+        "p50_us": 31.5,
+        "p95_us": 42.917,
+        "p99_us": 59.209
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 31373.444700695767,
+        "entries_s": 313734.44700695766,
+        "p50_us": 31.667,
+        "p95_us": 33.75,
+        "p99_us": 36.083
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 508.28291053909027,
+        "entries_s": 508282.9105390903,
+        "p50_us": 1951.041,
+        "p95_us": 2488.834,
+        "p99_us": 2488.834
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 526.3065375587609,
+        "entries_s": 526306.5375587608,
+        "p50_us": 1903.417,
+        "p95_us": 2013.958,
+        "p99_us": 2013.958
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 24350.11965648799,
+        "entries_s": 243501.1965648799,
+        "p50_us": 40.542,
+        "p95_us": 49.292,
+        "p99_us": 50.0
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 29016.963316754973,
+        "entries_s": 290169.63316754973,
+        "p50_us": 33.375,
+        "p95_us": 38.333,
+        "p99_us": 45.334
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 25771.522055784008,
+        "entries_s": 257715.22055784008,
+        "p50_us": 38.75,
+        "p95_us": 41.958,
+        "p99_us": 53.167
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 26029.790574716953,
+        "entries_s": 260297.9057471695,
+        "p50_us": 38.542,
+        "p95_us": 44.292,
+        "p99_us": 50.584
+      },
+      "save_us": 28822.583,
+      "rdb_bytes": 5322363,
+      "restart_ms": 42.23704105243087,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 96501.62315730151,
+        "entries_s": 96501.62315730151,
+        "p50_us": 10.0,
+        "p95_us": 12.0,
+        "p99_us": 12.958
+      },
+      "trim_us": 177.625,
+      "delete_stream_us": 68.583,
+      "process_peak_rss_bytes": 26017792
+    },
+    {
+      "workload": "drift",
+      "mode": "baseline",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 4.100166,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 15201,
+          "used_memory_delta": 91056
+        },
+        "500": {
+          "stream_memory": 75337,
+          "used_memory_delta": 153152
+        },
+        "1000": {
+          "stream_memory": 150501,
+          "used_memory_delta": 231792
+        },
+        "2500": {
+          "stream_memory": 377342,
+          "used_memory_delta": 459440
+        },
+        "5000": {
+          "stream_memory": 2070877,
+          "used_memory_delta": 2185056
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 3207648,
+      "used_memory_delta": 2185056,
+      "stream_memory": 2070877,
+      "redis_peak_memory": 3208000,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 86699.15170629359,
+        "entries_s": 86699.15170629359,
+        "p50_us": 10.875,
+        "p95_us": 15.875,
+        "p99_us": 20.458
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 30689.77729656207,
+        "entries_s": 306897.77296562074,
+        "p50_us": 30.416,
+        "p95_us": 42.25,
+        "p99_us": 62.458
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 33720.625962723876,
+        "entries_s": 337206.25962723873,
+        "p50_us": 28.917,
+        "p95_us": 32.667,
+        "p99_us": 41.75
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 669.935624992547,
+        "entries_s": 669935.624992547,
+        "p50_us": 1491.25,
+        "p95_us": 1579.125,
+        "p99_us": 1579.125
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 659.4035273077245,
+        "entries_s": 659403.5273077245,
+        "p50_us": 1506.041,
+        "p95_us": 1628.333,
+        "p99_us": 1628.333
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 28354.781835473077,
+        "entries_s": 283547.8183547308,
+        "p50_us": 35.167,
+        "p95_us": 40.375,
+        "p99_us": 49.208
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 31937.75969390851,
+        "entries_s": 319377.5969390851,
+        "p50_us": 31.0,
+        "p95_us": 34.667,
+        "p99_us": 36.042
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 27416.729907923655,
+        "entries_s": 274167.2990792366,
+        "p50_us": 35.083,
+        "p95_us": 49.542,
+        "p99_us": 55.708
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 32276.26416443853,
+        "entries_s": 322762.6416443853,
+        "p50_us": 30.125,
+        "p95_us": 39.291,
+        "p99_us": 42.583
+      },
+      "save_us": 13314.083,
+      "rdb_bytes": 1173675,
+      "restart_ms": 41.49841604521498,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 91911.93366164276,
+        "entries_s": 91911.93366164276,
+        "p50_us": 10.583,
+        "p95_us": 12.209,
+        "p99_us": 19.0
+      },
+      "trim_us": 40.625,
+      "delete_stream_us": 41.542,
+      "process_peak_rss_bytes": 12697600
+    },
+    {
+      "workload": "drift",
+      "mode": "zstd",
+      "entries": 5000,
+      "dictionary_bytes": 0,
+      "training_ms": 3.937541,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 5378,
+          "used_memory_delta": 105792
+        },
+        "500": {
+          "stream_memory": 15934,
+          "used_memory_delta": 117968
+        },
+        "1000": {
+          "stream_memory": 28355,
+          "used_memory_delta": 133376
+        },
+        "2500": {
+          "stream_memory": 72088,
+          "used_memory_delta": 177984
+        },
+        "5000": {
+          "stream_memory": 748426,
+          "used_memory_delta": 942320
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 1964864,
+      "used_memory_delta": 942320,
+      "stream_memory": 748426,
+      "redis_peak_memory": 1965216,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 72326.48595336884,
+        "entries_s": 72326.48595336884,
+        "p50_us": 11.834,
+        "p95_us": 25.125,
+        "p99_us": 30.292
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 25054.041567661447,
+        "entries_s": 250540.41567661447,
+        "p50_us": 39.334,
+        "p95_us": 51.833,
+        "p99_us": 54.666
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 24429.211473912044,
+        "entries_s": 244292.11473912044,
+        "p50_us": 40.125,
+        "p95_us": 53.041,
+        "p99_us": 56.667
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 611.345621027094,
+        "entries_s": 611345.6210270941,
+        "p50_us": 1635.166,
+        "p95_us": 1683.583,
+        "p99_us": 1683.583
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 602.4338326840435,
+        "entries_s": 602433.8326840436,
+        "p50_us": 1645.583,
+        "p95_us": 1901.416,
+        "p99_us": 1901.416
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 22164.722007840104,
+        "entries_s": 221647.22007840106,
+        "p50_us": 44.375,
+        "p95_us": 54.583,
+        "p99_us": 61.041
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 13372.570237419288,
+        "entries_s": 133725.70237419286,
+        "p50_us": 71.833,
+        "p95_us": 90.5,
+        "p99_us": 90.958
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 8694.89307194398,
+        "entries_s": 86948.9307194398,
+        "p50_us": 112.958,
+        "p95_us": 125.167,
+        "p99_us": 130.25
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 26648.90073284477,
+        "entries_s": 266489.0073284477,
+        "p50_us": 36.625,
+        "p95_us": 45.833,
+        "p99_us": 49.584
+      },
+      "save_us": 16201.959,
+      "rdb_bytes": 1173675,
+      "restart_ms": 30.838250007946044,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 68908.2046242918,
+        "entries_s": 68908.2046242918,
+        "p50_us": 13.25,
+        "p95_us": 20.458,
+        "p99_us": 25.166
+      },
+      "trim_us": 441.833,
+      "delete_stream_us": 51.959,
+      "process_peak_rss_bytes": 11681792
+    },
+    {
+      "workload": "drift",
+      "mode": "dictionary",
+      "entries": 5000,
+      "dictionary_bytes": 1024,
+      "training_ms": 3.709292,
+      "memory_checkpoints": {
+        "100": {
+          "stream_memory": 9575,
+          "used_memory_delta": 110144
+        },
+        "500": {
+          "stream_memory": 34684,
+          "used_memory_delta": 137680
+        },
+        "1000": {
+          "stream_memory": 65526,
+          "used_memory_delta": 172544
+        },
+        "2500": {
+          "stream_memory": 162766,
+          "used_memory_delta": 273472
+        },
+        "5000": {
+          "stream_memory": 1854602,
+          "used_memory_delta": 1997552
+        }
+      },
+      "training_sha256": "2b6ffd3167e434444dd3e625f20697107e881c69fb2edebb43cabbd0d93a2d6f",
+      "dictionary_sha256": "f059376edaf7601fe821cad44fc448b1a313084a8c04f5a920cb40f357a5c307",
+      "used_memory": 3020128,
+      "used_memory_delta": 1997552,
+      "stream_memory": 1854602,
+      "redis_peak_memory": 3020480,
+      "xadd": {
+        "operations": 4999,
+        "ops_s": 73840.13237634709,
+        "entries_s": 73840.13237634709,
+        "p50_us": 11.334,
+        "p95_us": 32.209,
+        "p99_us": 35.792
+      },
+      "xrange_10": {
+        "operations": 100,
+        "ops_s": 28807.70940395985,
+        "entries_s": 288077.0940395985,
+        "p50_us": 34.167,
+        "p95_us": 45.875,
+        "p99_us": 50.834
+      },
+      "xread_10": {
+        "operations": 100,
+        "ops_s": 28438.37759055846,
+        "entries_s": 284383.77590558457,
+        "p50_us": 35.083,
+        "p95_us": 45.709,
+        "p99_us": 51.5
+      },
+      "xrange_1000": {
+        "operations": 15,
+        "ops_s": 577.8778645116805,
+        "entries_s": 577877.8645116804,
+        "p50_us": 1709.375,
+        "p95_us": 1828.417,
+        "p99_us": 1828.417
+      },
+      "xread_1000": {
+        "operations": 15,
+        "ops_s": 568.5551478593993,
+        "entries_s": 568555.1478593993,
+        "p50_us": 1753.833,
+        "p95_us": 1815.125,
+        "p99_us": 1815.125
+      },
+      "group_delivery": {
+        "operations": 50,
+        "ops_s": 20572.939918374803,
+        "entries_s": 205729.39918374803,
+        "p50_us": 46.209,
+        "p95_us": 67.125,
+        "p99_us": 71.625
+      },
+      "pending_reread": {
+        "operations": 50,
+        "ops_s": 10547.321613149557,
+        "entries_s": 105473.21613149557,
+        "p50_us": 92.708,
+        "p95_us": 104.5,
+        "p99_us": 107.542
+      },
+      "claim": {
+        "operations": 50,
+        "ops_s": 6069.128588448141,
+        "entries_s": 60691.28588448141,
+        "p50_us": 160.458,
+        "p95_us": 184.5,
+        "p99_us": 198.042
+      },
+      "autoclaim": {
+        "operations": 50,
+        "ops_s": 25630.03758388711,
+        "entries_s": 256300.3758388711,
+        "p50_us": 37.375,
+        "p95_us": 50.5,
+        "p99_us": 55.208
+      },
+      "save_us": 14018.375,
+      "rdb_bytes": 1173675,
+      "restart_ms": 43.133084021974355,
+      "xdel": {
+        "operations": 100,
+        "ops_s": 80278.21217210365,
+        "entries_s": 80278.21217210365,
+        "p50_us": 11.333,
+        "p95_us": 20.125,
+        "p99_us": 25.834
+      },
+      "trim_us": 584.791,
+      "delete_stream_us": 36.875,
+      "process_peak_rss_bytes": 11321344
+    }
+  ],
+  "elapsed_seconds": 10.958413125015795
+}

@@ -752,7 +752,9 @@ int rdbSaveObjectType(rio *rdb, robj *o) {
         } else
             serverPanic("Unknown hash encoding");
     case OBJ_STREAM:
-        return rdbSaveType(rdb,RDB_TYPE_STREAM_LISTPACKS_5);
+        return rdbSaveType(rdb,((stream*)o->ptr)->compression &&
+                          !((stream*)o->ptr)->compression_dict ?
+                          RDB_TYPE_STREAM_PLAIN_ZSTD : RDB_TYPE_STREAM_LISTPACKS_5);
 #ifdef ENABLE_GCRA
     case OBJ_GCRA:
         return rdbSaveType(rdb,RDB_TYPE_GCRA);
@@ -1553,29 +1555,38 @@ ssize_t rdbSaveObject(rio *rdb, robj *o, robj *key, int dbid) {
     } else if (o->type == OBJ_STREAM) {
         /* Store how many listpacks we have inside the radix tree. */
         stream *s = o->ptr;
+        if (s->compression && !s->compression_dict) {
+            if ((n = rdbSaveLen(rdb,1)) == -1) return -1; /* Policy format version. */
+            nwritten += n;
+            if ((n = rdbSaveLen(rdb,STREAM_COMPRESSION_LEVEL)) == -1) return -1;
+            nwritten += n;
+        }
         rax *rax = s->rax;
         if ((n = rdbSaveLen(rdb,raxSize(rax))) == -1) return -1;
         nwritten += n;
 
-        /* Serialize all the listpacks inside the radix tree as they are,
+        /* Serialize ordinary listpacks (decode experimental memory envelopes),
          * when loading back, we'll use the first entry of each listpack
          * to insert it back into the radix tree. */
         raxIterator ri;
         raxStart(&ri,rax);
         raxSeek(&ri,"^",NULL,0);
         while (raxNext(&ri)) {
-            unsigned char *lp = ri.data;
+            unsigned char *lp = streamDecodeListpack(s, ri.data);
             size_t lp_bytes = lpBytes(lp);
             if ((n = rdbSaveRawString(rdb,ri.key,ri.key_len)) == -1) {
+                if (lp != ri.data) lpFree(lp);
                 raxStop(&ri);
                 return -1;
             }
             nwritten += n;
             if ((n = rdbSaveRawString(rdb,lp,lp_bytes)) == -1) {
+                if (lp != ri.data) lpFree(lp);
                 raxStop(&ri);
                 return -1;
             }
             nwritten += n;
+            if (lp != ri.data) lpFree(lp);
         }
         raxStop(&ri);
 
@@ -4129,10 +4140,26 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int rdbver, int *e
                rdbtype == RDB_TYPE_STREAM_LISTPACKS_2 ||
                rdbtype == RDB_TYPE_STREAM_LISTPACKS_3 ||
                rdbtype == RDB_TYPE_STREAM_LISTPACKS_4 ||
-               rdbtype == RDB_TYPE_STREAM_LISTPACKS_5)
+               rdbtype == RDB_TYPE_STREAM_LISTPACKS_5 ||
+               rdbtype == RDB_TYPE_STREAM_PLAIN_ZSTD)
     {
         o = createStreamObject();
         stream *s = o->ptr;
+        if (rdbtype == RDB_TYPE_STREAM_PLAIN_ZSTD) {
+            uint64_t policy_version = rdbLoadLen(rdb,NULL);
+            uint64_t level = rdbLoadLen(rdb,NULL);
+            if (policy_version != 1 || level != STREAM_COMPRESSION_LEVEL) {
+                rdbReportCorruptRDB("Unsupported stream Zstd policy version or level");
+                decrRefCount(o);
+                return NULL;
+            }
+#ifndef USE_COMPRESSION
+            rdbReportCorruptRDB("Stream Zstd policy requires BUILD_COMPRESSION=yes");
+            decrRefCount(o);
+            return NULL;
+#endif
+            s->compression = 1;
+        }
         uint64_t listpacks = rdbLoadLen(rdb,NULL);
         if (listpacks == RDB_LENERR) {
             rdbReportReadError("Stream listpacks len loading failed.");
@@ -4174,8 +4201,9 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int rdbver, int *e
              * backlen, rewrite them before the integrity check below. */
             lp = rdbUpgradeListpack(lp, &lp_size, rdbver);
 
-            if (deep_integrity_validation) server.stat_dump_payload_sanitizations++;
-            if (!streamValidateListpackIntegrity(lp, lp_size, deep_integrity_validation)) {
+            int validate_stream = deep_integrity_validation || s->compression;
+            if (validate_stream) server.stat_dump_payload_sanitizations++;
+            if (!streamValidateListpackIntegrity(lp, lp_size, validate_stream)) {
                 rdbReportCorruptRDB("Stream listpack integrity check failed.");
                 sdsfree(nodekey);
                 decrRefCount(o);
@@ -4212,14 +4240,20 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int rdbver, int *e
             /* Insert the key in the radix tree. */
             int retval = raxTryInsert(s->rax,
                 (unsigned char*)nodekey,sizeof(streamID),lp,NULL);
-            sdsfree(nodekey);
             if (!retval) {
+                sdsfree(nodekey);
                 rdbReportCorruptRDB("Listpack re-added with existing key");
                 decrRefCount(o);
                 zfree(lp);
                 return NULL;
             }
             s->alloc_size += lpBytes(lp);
+            if (s->compression && listpacks) {
+                unsigned char *compressed = streamCompressLoadedListpack(s, lp);
+                if (compressed != lp)
+                    raxInsert(s->rax,(unsigned char*)nodekey,sizeof(streamID),compressed,NULL);
+            }
+            sdsfree(nodekey);
         }
         /* Load total number of items inside the stream. */
         s->length = rdbLoadLen(rdb,NULL);

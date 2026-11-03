@@ -1,7 +1,7 @@
 {
     "XCFGSET": {
-        "summary": "Sets the IDMP configuration parameters for a stream.",
-        "complexity": "O(1)",
+        "summary": "Sets stream configuration, including experimental sealed-block compression.",
+        "complexity": "O(1) with bounded dictionary validation (at most 65536 bytes and 16 retained generations).",
         "group": "stream",
         "since": "8.6.0",
         "arity": -2,
@@ -52,6 +52,30 @@
                 "name": "idmp-maxsize",
                 "type": "integer",
                 "token": "IDMP-MAXSIZE",
+                "optional": true
+            },
+            {
+                "name": "compression",
+                "type": "oneof",
+                "optional": true,
+                "token": "COMPRESSION",
+                "arguments": [
+                    {
+                        "name": "off",
+                        "type": "pure-token",
+                        "token": "OFF"
+                    },
+                    {
+                        "name": "zstd",
+                        "type": "pure-token",
+                        "token": "ZSTD"
+                    }
+                ]
+            },
+            {
+                "name": "dictionary",
+                "type": "string",
+                "token": "DICTIONARY",
                 "optional": true
             }
         ]

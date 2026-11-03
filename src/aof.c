@@ -2658,6 +2658,7 @@ int rioWriteStreamIdmpEntry(rio *r, robj *key, const char *pid, size_t pid_len, 
 int rewriteStreamObject(rio *r, robj *key, robj *o) {
     stream *s = o->ptr;
     streamID id;
+    int compression_policy_written = 0;
 
     if (s->length) {
         /* Reconstruct the stream data using XADD commands. */
@@ -2687,6 +2688,17 @@ int rewriteStreamObject(rio *r, robj *key, robj *o) {
                     streamIteratorStop(&si);
                     return 0;                  
                 }
+            }
+            /* Enable plain block compression after the first entry creates
+             * the key, so replay compresses subsequent historical blocks. */
+            if (s->compression && !s->compression_dict && !compression_policy_written) {
+                if (!rioWriteBulkCount(r,'*',4) ||
+                    !rioWriteBulkString(r,"XCFGSET",7) || !rioWriteBulkObject(r,key) ||
+                    !rioWriteBulkString(r,"COMPRESSION",11) || !rioWriteBulkString(r,"ZSTD",4)) {
+                    streamIteratorStop(&si);
+                    return 0;
+                }
+                compression_policy_written = 1;
             }
         }
         streamIteratorStop(&si);
@@ -2821,6 +2833,18 @@ int rewriteStreamObject(rio *r, robj *key, robj *o) {
             }
         }
         raxStop(&ri);
+    }
+
+    /* Empty streams and dictionary configurations are restored here. */
+    if (s->compression && !compression_policy_written) {
+        if (!rioWriteBulkCount(r,'*',s->compression_dict ? 6 : 4) ||
+            !rioWriteBulkString(r,"XCFGSET",7) || !rioWriteBulkObject(r,key) ||
+            !rioWriteBulkString(r,"COMPRESSION",11) || !rioWriteBulkString(r,"ZSTD",4))
+            return 0;
+        if (s->compression_dict &&
+            (!rioWriteBulkString(r,"DICTIONARY",10) ||
+             !rioWriteBulkString(r,s->compression_dict,sdslen(s->compression_dict))))
+            return 0;
     }
 
     /* Emit XCFGSET to restore per-stream IDMP configuration if it differs

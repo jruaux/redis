@@ -88,6 +88,7 @@
 #define RDB_TYPE_BITMAP 33                    /* [logical byte length][RDB string with CRoaring64 portable blob] */
 #define RDB_TYPE_SET_LISTPACK_EX 34           /* Set LP with member expirations. Attach min TTL at start */
 #define RDB_TYPE_SET_METADATA 35              /* Set with member expirations. Attach min TTL at start */
+#define RDB_TYPE_STREAM_PLAIN_ZSTD 37          /* Prototype: stream-v5 plus plain-Zstd load policy. */
 #ifdef ENABLE_GCRA
 #define RDB_TYPE_GCRA 36                      /* GCRA object */
 #endif
@@ -95,9 +96,9 @@
 
 /* Test if a type is an object type. */
 #ifdef ENABLE_GCRA
-#define rdbIsObjectType(t) (((t) >= 0 && (t) <= 7) || ((t) >= 9 && (t) <= 36))
+#define rdbIsObjectType(t) (((t) >= 0 && (t) <= 7) || ((t) >= 9 && (t) <= 36) || (t) == RDB_TYPE_STREAM_PLAIN_ZSTD)
 #else
-#define rdbIsObjectType(t) (((t) >= 0 && (t) <= 7) || ((t) >= 9 && (t) <= 35))
+#define rdbIsObjectType(t) (((t) >= 0 && (t) <= 7) || ((t) >= 9 && (t) <= 35) || (t) == RDB_TYPE_STREAM_PLAIN_ZSTD)
 #endif
 
 /* Special RDB opcodes (saved/loaded with rdbSaveType/rdbLoadType). */

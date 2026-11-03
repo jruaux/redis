@@ -37,8 +37,15 @@ extern dictType idmpDictType;
  * A db's epoch starts at 0 and never reaches this value. */
 #define STREAM_DISTRIB_NEVER_COUNTED UINT32_MAX
 
+typedef struct streamCompressionDict streamCompressionDict;
+
 typedef struct stream {
     rax *rax;               /* The radix tree holding the stream. */
+    int compression;       /* Experimental: compress sealed listpacks with Zstd. */
+    sds compression_dict;  /* Borrowed alias of current registry dictionary bytes. */
+    streamCompressionDict *compression_dicts; /* Immutable, reference-counted generations. */
+    size_t compression_scratch_peak;
+    size_t decompression_scratch_peak;
     uint64_t length;        /* Current number of elements inside this stream. */
     streamID last_id;       /* Zero if there are yet no items. */
     streamID first_id;      /* The first non-tombstone entry, zero if empty. */
@@ -82,6 +89,7 @@ typedef struct streamIterator {
     uint64_t end_seq;
     raxIterator ri;         /* Rax iterator. */
     unsigned char *lp;      /* Current listpack. */
+    unsigned char *decoded_lp; /* Iterator-owned decompression scratch, or NULL. */
     unsigned char *lp_last_ele; /* Previous listpack element position for corruption detection. */
     unsigned char *lp_ele;  /* Current listpack cursor. */
     unsigned char *lp_flags; /* Current entry flags pointer. */
@@ -250,5 +258,18 @@ void idmpEntryFree(idmpEntry *entry, size_t *alloc_size);
 idmpProducer *idmpProducerCreate(size_t *alloc_size);
 void idmpProducerFree(idmpProducer *producer, size_t *alloc_size);
 void streamFreeIdmpProducerGeneric(void *producer, void *strm);
+
+/* Experimental in-memory sealed-block compression. Decoding returns either
+ * the input or an owned listpack which the caller must lpFree(). */
+unsigned char *streamDecodeListpack(stream *s, unsigned char *lp);
+unsigned char *streamTryDecodeListpack(stream *s, unsigned char *lp, const char **error);
+int streamCompressionDictValid(const unsigned char *dict, size_t len);
+/* RDB loader has already charged the ordinary listpack to s->alloc_size. */
+unsigned char *streamCompressLoadedListpack(stream *s, unsigned char *lp);
+
+#define STREAM_COMPRESSION_MAX_BLOCK 65536
+#define STREAM_COMPRESSION_MAX_DICT 65536
+#define STREAM_COMPRESSION_MAX_GENERATIONS 16
+#define STREAM_COMPRESSION_LEVEL 3
 
 #endif
