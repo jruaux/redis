@@ -1,6 +1,9 @@
 > **Experimental stream compression fork:** See the [prototype README](STREAM-COMPRESSION-README.md)
 > for the storage design, usage, benchmark results, and limitations.
 
+Stream read commands also support experimental [scalar filtering](STREAM-FILTERING.md)
+using the vector-set expression language.
+
 [![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)
 
 This document serves as both a quick start guide to Redis and a detailed resource for building it from source.

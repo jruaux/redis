@@ -70,6 +70,12 @@
                 "optional": true
             },
             {
+                "token": "FILTER",
+                "name": "expression",
+                "type": "string",
+                "optional": true
+            },
+            {
                 "name": "streams",
                 "token": "STREAMS",
                 "type": "block",
@@ -124,6 +130,7 @@
                     "type": "null"
                 }
             ]
-        }
+        },
+        "complexity": "With FILTER, cost depends on the number of entries examined across the requested streams and the expression and field lookup cost per entry; COUNT and MAXCOUNT limit matches, not examined entries."
     }
 }
