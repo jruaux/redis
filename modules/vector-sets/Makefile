@@ -58,9 +58,12 @@ all: vset.so
 .c.xo:
 	$(CC) -I. $(CFLAGS) $(SHOBJ_CFLAGS) -fPIC -c $< -o $@
 
-vset.xo: ../../src/redismodule.h expr.c
+vset.xo: ../../src/redismodule.h expr.c fastjson.c ../../src/expr.h
 
-vset.so: vset.xo hnsw.xo vset_config.xo
+expr.xo: ../../src/expr.c ../../src/expr.h
+	$(CC) $(CFLAGS) $(SHOBJ_CFLAGS) -I../../src -DEXPR_MODULE -fPIC -c $< -o $@
+
+vset.so: vset.xo hnsw.xo vset_config.xo expr.xo
 	$(CC) -o $@ $^ $(SHOBJ_LDFLAGS) $(LIBS) $(SAN) -lc
 
 # Example sources / objects
@@ -81,12 +84,12 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-expr-test: expr.c fastjson.c fastjson_test.c
+expr-test: expr.c fastjson.c fastjson_test.c ../../src/expr.c ../../src/expr.h
 	$(CC) $(CFLAGS) expr.c -o expr-test -DTEST_MAIN -lm
 
 # Clean rule
 clean:
-	rm -f $(TARGET) $(OBJS) *.xo *.so
+	rm -f $(TARGET) $(OBJS) *.xo *.so expr-test
 
 # Declare phony targets
 .PHONY: all clean

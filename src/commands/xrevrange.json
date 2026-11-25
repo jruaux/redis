@@ -1,7 +1,7 @@
 {
     "XREVRANGE": {
         "summary": "Returns the messages from a stream within a range of IDs in reverse order.",
-        "complexity": "O(N) with N being the number of elements returned. If N is constant (e.g. always asking for the first 10 elements with COUNT), you can consider it O(1).",
+        "complexity": "O(N) with N being the number of entries returned without FILTER. With FILTER, cost depends on the number of entries examined and the expression and field lookup cost per entry; COUNT limits matches, not examined entries.",
         "group": "stream",
         "since": "5.0.0",
         "arity": -4,
@@ -56,6 +56,12 @@
                 "token": "COUNT",
                 "name": "count",
                 "type": "integer",
+                "optional": true
+            },
+            {
+                "token": "FILTER",
+                "name": "expression",
+                "type": "string",
                 "optional": true
             }
         ],
