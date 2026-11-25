@@ -6,6 +6,9 @@
 #include "dict.h"
 #include "xxhash.h"
 
+struct client;
+struct exprstate;
+
 /* Stream item ID: a 128 bit number composed of a milliseconds time and
  * a sequence counter. IDs generated in the same millisecond (or in a past
  * millisecond if the clock jumped backward) will use the millisecond time
@@ -183,6 +186,10 @@ typedef struct streamReplyRangeArgs {
                                    MAXSIZE is checked against the absolute
                                    c->net_output_bytes_curr_cmd. */
     size_t emitted_before;      /* Entries already emitted before this call. */
+    struct exprstate *filter;   /* Optional scalar predicate (no consumer group). */
+    streamID *last_examined;    /* Out: last entry evaluated, even if rejected. */
+    void (*on_first_entry)(struct client *, void *); /* Lazy XREAD reply header. */
+    void *on_first_entry_privdata;
 } streamReplyRangeArgs;
 
 /* Prototypes of exported APIs. */

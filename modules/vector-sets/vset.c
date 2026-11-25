@@ -119,8 +119,7 @@
 #include "hnsw.h"
 #include "vset_config.h"
 
-// We inline directly the expression implementation here so that building
-// the module is trivial.
+// JSON attribute adapter for the shared scalar expression engine.
 #include "expr.c"
 
 static RedisModuleType *VectorSetType;
@@ -808,7 +807,7 @@ int vectorSetFilterCallback(void *value, void *privdata) {
     if (nv->attrib == NULL) return 0; // No attributes? No match.
     size_t json_len;
     char *json = (char*)RedisModule_StringPtrLen(nv->attrib,&json_len);
-    return exprRun(expr,json,json_len);
+    return exprRunJson(expr,json,json_len);
 }
 
 /* Common path for the execution of the VSIM command both threaded and

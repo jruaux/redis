@@ -1678,6 +1678,7 @@ typedef struct client {
     uint64_t main_ch_client_id; /* The client id of this replica's main channel */
     multiState mstate;      /* MULTI/EXEC state */
     blockingState bstate;     /* blocking state */
+    struct exprstate *stream_read_filter; /* Compiled FILTER retained across XREAD wakeups. */
     long long woff;         /* Last write global replication offset. */
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE). The dict value
