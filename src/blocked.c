@@ -248,7 +248,10 @@ void replyToBlockedClientTimedOut(client *c) {
         c->bstate.btype == BLOCKED_LIST_NONEMPTY ||
         c->bstate.btype == BLOCKED_ZSET ||
         c->bstate.btype == BLOCKED_STREAM) {
-        addReplyNullArray(c);
+        if (c->bstate.btype == BLOCKED_STREAM && c->stream_read_filter)
+            streamReadFilterTimeout(c);
+        else
+            addReplyNullArray(c);
         updateStatsOnUnblock(c, 0, 0, 0);
     } else if (c->bstate.btype == BLOCKED_WAIT) {
         addReplyLongLong(c,replicationCountAcksByOffset(c->bstate.reploffset));

@@ -4041,6 +4041,8 @@ int xreadGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult 
             i++; /* Skip option argument. */
         } else if (!strcasecmp(arg, "maxsize")) {
             i++; /* Skip option argument. */
+        } else if (!strcasecmp(arg, "maxscan")) {
+            i++; /* Skip scan budget. */
         } else if (!strcasecmp(arg, "filter")) {
             i++; /* Skip the expression, which may itself be "STREAMS". */
         } else if (!strcasecmp(arg, "claim")) {

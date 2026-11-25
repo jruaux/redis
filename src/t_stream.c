@@ -2292,18 +2292,77 @@ static exprstate *streamCompileFilter(client *c, robj *arg) {
     return filter;
 }
 
-/* XREAD must not emit any protocol bytes until at least one entry matches. */
+#define STREAM_FILTER_DEFAULT_MAXSCAN 1000
+
+/* FILTER uses maps in RESP3 and alternating key/value arrays in RESP2. */
+static void streamFilterReplyMap(client *c, int pairs) {
+    if (c->resp == 2) addReplyArrayLen(c, pairs * 2);
+    else addReplyMapLen(c, pairs);
+}
+
+static void streamFilterReplyProgress(client *c, streamID *id) {
+    addReplyBulkCString(c, "last_scanned");
+    if (id) addReplyStreamID(c, id);
+    else addReplyNull(c);
+}
+
 typedef struct streamReadReply {
-    robj *key;
-    void **arraylen_ptr;
-    size_t *arraylen;
+    robj **keys;
+    streamID *ids;
+    int count;
+    int current;
+    int emitted;
+    int started;
 } streamReadReply;
 
+static void streamReadReplyStream(client *c, robj *key) {
+    streamFilterReplyMap(c, 3);
+    addReplyBulkCString(c, "key");
+    addReplyBulk(c, key);
+    addReplyBulkCString(c, "entries");
+}
+
+/* Delay all output until a match or command completion, since a filtered
+ * blocking read may examine only rejected entries and block again. */
 static void streamReadReplyHeader(client *c, void *privdata) {
     streamReadReply *reply = privdata;
-    if ((*reply->arraylen)++ == 0) *reply->arraylen_ptr = addReplyDeferredLen(c);
-    if (c->resp == 2) addReplyArrayLen(c, 2);
-    addReplyBulk(c, reply->key);
+    if (!reply->started) {
+        streamFilterReplyMap(c, 2);
+        addReplyBulkCString(c, "streams");
+        addReplyArrayLen(c, reply->count);
+        reply->started = 1;
+    }
+    while (reply->emitted < reply->current) {
+        int i = reply->emitted++;
+        streamReadReplyStream(c, reply->keys[i]);
+        addReplyArrayLen(c, 0);
+        streamFilterReplyProgress(c, &reply->ids[i]);
+    }
+    if (reply->current < reply->count)
+        streamReadReplyStream(c, reply->keys[reply->current]);
+}
+
+static void streamReadReplyFinish(client *c, streamReadReply *reply, const char *status) {
+    reply->current = reply->count;
+    streamReadReplyHeader(c, reply);
+    addReplyBulkCString(c, "status");
+    addReplyBulkCString(c, status);
+}
+
+/* All XREAD options preceding STREAMS have one argument. Before blocking,
+ * symbolic IDs and examined positions are rewritten to numeric IDs. */
+void streamReadFilterTimeout(client *c) {
+    int pos;
+    for (pos = 1; pos < c->argc; pos += 2)
+        if (!strcasecmp(c->argv[pos]->ptr, "STREAMS")) break;
+    serverAssert(pos < c->argc);
+    int count = (c->argc - pos - 1) / 2;
+    streamID *ids = zmalloc(sizeof(*ids) * count);
+    for (int i = 0; i < count; i++)
+        serverAssert(streamParseIDOrReply(NULL, c->argv[pos+1+count+i], &ids[i], 0) == C_OK);
+    streamReadReply reply = {.keys = c->argv+pos+1, .ids = ids, .count = count};
+    streamReadReplyFinish(c, &reply, "timeout");
+    zfree(ids);
 }
 
 /* Send the stream items in the specified range to the client 'c'. The range
@@ -2529,14 +2588,25 @@ size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
     if (!(flags & STREAM_RWR_RAWENTRIES) && !arraylen_ptr && !args->filter)
         arraylen_ptr = addReplyDeferredLen(c);
     streamIteratorStart(&si,s,start,end,rev);
-    while (streamIteratorGetID(&si,&id,&numfields)) {
+    if (args->filter) si.skip_tombstones = 0; /* Deleted entries also consume scan work. */
+    while ((!args->filter || *args->scan_remaining > 0) &&
+           streamIteratorGetID(&si,&id,&numfields)) {
         /* Break before delivering the entry so it is neither sent nor added to
          * the consumer's PEL. */
         if (streamReplyMaxsizeReached(c, maxsize, emitted_before + arraylen))
             break;
 
         if (args->filter) {
+            --*args->scan_remaining;
+            args->examined++;
             if (args->last_examined) *args->last_examined = id;
+            if (si.entry_flags & STREAM_ITEM_FLAG_DELETED) {
+                unsigned char *field, *value;
+                int64_t fieldlen, valuelen;
+                for (int64_t i = 0; i < numfields; i++)
+                    streamIteratorGetField(&si, &field, &value, &fieldlen, &valuelen);
+                continue;
+            }
             if (!streamEntryMatches(&si, numfields, args->filter, &filter_entry)) continue;
             if (!arraylen_ptr) {
                 if (args->on_first_entry)
@@ -3067,6 +3137,8 @@ void xrangeGenericCommand(client *c, int rev) {
     stream *s;
     streamID startid, endid;
     long long count = -1;
+    long long maxscan = STREAM_FILTER_DEFAULT_MAXSCAN;
+    int maxscan_given = 0;
     robj *filter_arg = NULL;
     exprstate *filter = NULL;
     robj *startarg = rev ? c->argv[3] : c->argv[2];
@@ -3097,6 +3169,13 @@ void xrangeGenericCommand(client *c, int rev) {
                     != C_OK) return;
                 if (count < 0) count = 0;
                 j++; /* Consume additional arg. */
+            } else if (!strcasecmp(c->argv[j]->ptr,"MAXSCAN") && additional >= 1 && !maxscan_given) {
+                maxscan_given = 1;
+                if (getLongLongFromObjectOrReply(c, c->argv[++j], &maxscan, NULL) != C_OK) return;
+                if (maxscan <= 0) {
+                    addReplyError(c, "MAXSCAN must be a positive integer");
+                    return;
+                }
             } else if (!strcasecmp(c->argv[j]->ptr,"FILTER") && additional >= 1 && !filter_arg) {
                 filter_arg = c->argv[++j];
             } else {
@@ -3106,24 +3185,49 @@ void xrangeGenericCommand(client *c, int rev) {
         }
     }
 
+    if (maxscan_given && !filter_arg) {
+        addReplyError(c, "MAXSCAN requires FILTER");
+        return;
+    }
     if (filter_arg && !(filter = streamCompileFilter(c, filter_arg))) return;
 
-    /* Return the specified range to the user. */
-    if ((kv = lookupKeyReadOrReply(c, c->argv[1], shared.emptyarray)) == NULL ||
-        checkType(c, kv, OBJ_STREAM)) goto cleanup;
-
-    s = kv->ptr;
-
-    if (count == 0) {
+    /* Missing keys still return the FILTER envelope, after expression validation. */
+    kv = lookupKeyRead(c->db, c->argv[1]);
+    if (checkType(c, kv, OBJ_STREAM)) goto cleanup;
+    if (filter) {
+        streamID last;
+        size_t emitted = 0;
+        streamReplyRangeArgs args = {
+            .start = &startid, .end = &endid, .count = count > 0 ? count : 0,
+            .rev = rev, .min_idle_time = -1, .filter = filter,
+            .last_examined = &last, .scan_remaining = &maxscan,
+        };
+        streamFilterReplyMap(c, 3);
+        addReplyBulkCString(c, "entries");
+        if (kv && count != 0) {
+            if (server.memory_tracking_enabled) old_alloc = kvobjAllocSize(kv);
+            emitted = streamReplyWithRange(c, kv->ptr, &args);
+            if (server.memory_tracking_enabled)
+                updateSlotAllocSize(c->db,getKeySlot(c->argv[1]->ptr),kv,old_alloc,kvobjAllocSize(kv));
+        } else {
+            addReplyArrayLen(c, 0);
+        }
+        streamFilterReplyProgress(c, args.examined ? &last : NULL);
+        addReplyBulkCString(c, "status");
+        addReplyBulkCString(c, maxscan == 0 ? "budget_exhausted" :
+                            count == 0 || (count > 0 && emitted == (size_t)count) ?
+                            "count_reached" : "exhausted");
+    } else if (!kv) {
+        addReply(c, shared.emptyarray);
+    } else if (count == 0) {
         addReplyNullArray(c);
     } else {
+        s = kv->ptr;
         if (count == -1) count = 0;
-        if (server.memory_tracking_enabled)
-            old_alloc = kvobjAllocSize(kv);
+        if (server.memory_tracking_enabled) old_alloc = kvobjAllocSize(kv);
         streamReplyRangeArgs args = {
             .start = &startid, .end = &endid, .count = count,
             .rev = rev, .min_idle_time = -1,
-            .filter = filter,
         };
         streamReplyWithRange(c,s,&args);
         if (server.memory_tracking_enabled)
@@ -3167,6 +3271,8 @@ void xreadCommand(client *c) {
     long long count = 0;
     long long maxcount = 0; /* 0 means, no MAXCOUNT argument given. */
     long long maxsize = 0;  /* 0 means, no MAXSIZE argument given. */
+    long long maxscan = STREAM_FILTER_DEFAULT_MAXSCAN;
+    int maxscan_given = 0;
     int streams_count = 0;
     int streams_arg = 0;
     int noack = 0;          /* True if NOACK option was specified. */
@@ -3222,6 +3328,13 @@ void xreadCommand(client *c) {
                 return;
             if (maxsize <= 0) {
                 addReplyError(c,"MAXSIZE must be a positive integer");
+                return;
+            }
+        } else if (!strcasecmp(o,"MAXSCAN") && moreargs && !maxscan_given) {
+            maxscan_given = 1;
+            if (getLongLongFromObjectOrReply(c, c->argv[++i], &maxscan, NULL) != C_OK) return;
+            if (maxscan <= 0) {
+                addReplyError(c, "MAXSCAN must be a positive integer");
                 return;
             }
         } else if (!strcasecmp(o,"FILTER") && moreargs && !filter_arg) {
@@ -3284,11 +3397,17 @@ void xreadCommand(client *c) {
         return;
     }
 
+    if (maxscan_given && !filter_arg) {
+        addReplyError(c, "MAXSCAN requires FILTER");
+        return;
+    }
+
     /* Retain the compiled predicate until command completion, including any
      * number of blocking wakeups. resetClient/freeClient own final cleanup. */
     if (filter_arg && !c->stream_read_filter) {
         c->stream_read_filter = streamCompileFilter(c, filter_arg);
         if (!c->stream_read_filter) return;
+        c->stream_read_scan_remaining = maxscan;
     }
     exprstate *filter = c->stream_read_filter;
 
@@ -3387,12 +3506,19 @@ void xreadCommand(client *c) {
     /* Compute an absolute threshold by adding the bytes already accumulated
      * (non-zero inside MULTI/EXEC) to MAXSIZE. Zero means "no limit". */
     long long maxsize_threshold = maxsize ? maxsize + c->net_output_bytes_curr_cmd : 0;
+    streamReadReply filter_reply = {.keys = c->argv+streams_arg, .ids = ids, .count = streams_count};
+    int result_limit = 0;
     for (int i = 0; i < streams_count; i++) {
+        if (filter && c->stream_read_scan_remaining == 0) break;
+        filter_reply.current = i;
         /* Stop scanning further streams once a cumulative limit is reached.
          * At least the first stream is always served, so a single message
          * larger than MAXSIZE is still returned. */
-        if (maxcount && total_entries >= (size_t)maxcount) break;
-        if (streamReplyMaxsizeReached(c, maxsize_threshold, total_entries)) break;
+        if ((maxcount && total_entries >= (size_t)maxcount) ||
+            streamReplyMaxsizeReached(c, maxsize_threshold, total_entries)) {
+            result_limit = 1;
+            break;
+        }
 
         kvobj *o = lookupKeyRead(c->db, c->argv[streams_arg + i]);
         if (o == NULL) continue;
@@ -3483,7 +3609,8 @@ void xreadCommand(client *c) {
             /* For consumers without a group, we serve synchronously if we can
              * actually provide at least one item from the stream. */
             streamID maxid;
-            streamLastValidID(s, &maxid);
+            if (filter) maxid = s->last_id;
+            else streamLastValidID(s, &maxid);
             if (streamCompareID(&maxid, gt) > 0) {
                 serve_synchronously = 1;
             }
@@ -3535,7 +3662,6 @@ void xreadCommand(client *c) {
                 if (count == 0 || remaining < (size_t)count)
                     stream_count = remaining;
             }
-            streamReadReply filter_reply = {c->argv[streams_arg+i], &arraylen_ptr, &arraylen};
             streamReplyRangeArgs args = {
                 .start = &start, .count = stream_count,
                 .min_idle_time = min_idle_time,
@@ -3543,13 +3669,23 @@ void xreadCommand(client *c) {
                 .flags = flags, .spi = &spi, .propCount = &propCount,
                 .maxsize = maxsize_threshold, .emitted_before = total_entries,
                 .filter = filter, .last_examined = filter ? gt : NULL,
+                .scan_remaining = filter ? &c->stream_read_scan_remaining : NULL,
                 .on_first_entry = filter ? streamReadReplyHeader : NULL,
                 .on_first_entry_privdata = &filter_reply,
             };
             /* New deliveries (XREADGROUP without NOACK) add entries to this
              * group's PEL; snapshot it around the read for INFO Streams. */
             int64_t old_pel = groups ? streamCGroupSample(groups[i], STREAM_DISTRIB_CGROUPS_PEL) : -1;
-            total_entries += streamReplyWithRange(c,s,&args);
+            size_t emitted = streamReplyWithRange(c,s,&args);
+            total_entries += emitted;
+            if (filter) {
+                if (emitted) {
+                    streamFilterReplyProgress(c, gt);
+                    filter_reply.emitted = i + 1;
+                }
+                if ((stream_count && emitted == stream_count) ||
+                    streamReplyMaxsizeReached(c, maxsize_threshold, total_entries)) result_limit = 1;
+            }
             if (groups)
                 streamUpdateCGStat(c->db, groups[i], STREAM_DISTRIB_CGROUPS_PEL, old_pel);
             if (server.memory_tracking_enabled)
@@ -3567,6 +3703,14 @@ void xreadCommand(client *c) {
         if (consumer_created && (noack || propCount == 0)) {
             streamPropagateConsumerCreation(c,spi.keyname, spi.groupname, consumer->name);
         }
+    }
+
+    if (filter && (total_entries || c->stream_read_scan_remaining == 0 ||
+                   !has_block_timeout || (c->flags & CLIENT_DENY_BLOCKING))) {
+        streamReadReplyFinish(c, &filter_reply,
+            c->stream_read_scan_remaining == 0 ? "budget_exhausted" :
+            result_limit ? "result_limit" : "caught_up");
+        goto cleanup;
     }
 
      /* We replied synchronously! Set the top array len and return to caller. */

@@ -1,32 +1,50 @@
+# Normalize only in the older predicate/ownership regressions; MAXSCAN tests
+# below assert the wire contract directly.
+proc stream_filter_legacy_reply {reply} {
+    if {[catch {dict exists $reply status} present] || !$present} {return $reply}
+    if {[dict exists $reply entries]} {return [dict get $reply entries]}
+    set result {}
+    foreach part [dict get $reply streams] {
+        if {[llength [dict get $part entries]]} {
+            lappend result [list [dict get $part key] [dict get $part entries]]
+        }
+    }
+    return $result
+}
+proc stream_filter_legacy {args} {
+    return [stream_filter_legacy_reply [r {*}$args]]
+}
+
 # Exercise compiled-predicate ownership repeatedly, with explicit allocator
 # growth assertions even when no external leak detector is available.
 proc stream_filter_leak_reads {iterations} {
     set predicate {(.region in ["eu", "apac"] and .amount > 100) or .region == "us"}
     for {set i 0} {$i < $iterations} {incr i} {
-        assert_equal 1 [llength [r xrange leak-source - + filter $predicate]]
-        assert_equal 1 [llength [r xrevrange leak-source + - count 1 filter $predicate]]
-        assert_equal 1 [llength [lindex [r xread filter $predicate streams leak-source 0] 0 1]]
+        assert_equal 1 [llength [stream_filter_legacy xrange leak-source - + filter $predicate]]
+        assert_equal 1 [llength [stream_filter_legacy xrevrange leak-source + - count 1 filter $predicate]]
+        assert_equal 1 [llength [lindex [stream_filter_legacy xread filter $predicate streams leak-source 0] 0 1]]
         # Fail resolution after pushing a borrowed string onto the VM stack.
-        assert_equal {} [r xrange leak-source - + filter {.region and .missing}]
-        assert_equal {} [r xread filter {.region and .missing} streams leak-source 0]
+        assert_equal {} [stream_filter_legacy xrange leak-source - + filter {.region and .missing}]
+        assert_equal {} [stream_filter_legacy xread filter {.region and .missing} streams leak-source 0]
         # These paths compile a predicate but never deliver an entry.
-        assert_equal {} [r xrange leak-absent - + filter $predicate]
-        assert_equal {} [r xread filter $predicate streams leak-absent 0]
-        assert_error {*WRONGTYPE*} {r xrange leak-wrongtype - + filter $predicate}
-        assert_error {*WRONGTYPE*} {r xread filter $predicate streams leak-wrongtype 0}
+        assert_equal {} [stream_filter_legacy xrange leak-absent - + filter $predicate]
+        assert_equal {} [stream_filter_legacy xread filter $predicate streams leak-absent 0]
+        assert_error {*WRONGTYPE*} {stream_filter_legacy xrange leak-wrongtype - + filter $predicate}
+        assert_error {*WRONGTYPE*} {stream_filter_legacy xread filter $predicate streams leak-wrongtype 0}
         # Compile failure after creating tokens, tuple values and program state.
-        assert_error {*syntax error in FILTER*} {r xrange leak-source - + filter "$predicate and ("}
-        assert_error {*syntax error in FILTER*} {r xread filter "$predicate and (" streams leak-source 0}
+        assert_error {*syntax error in FILTER*} {stream_filter_legacy xrange leak-source - + filter "$predicate and ("}
+        assert_error {*syntax error in FILTER*} {stream_filter_legacy xread filter "$predicate and (" streams leak-source 0}
         r multi
-        r xread filter $predicate streams leak-source 0
-        r xread filter 0 streams leak-source 0
-        set result [r exec]
+        stream_filter_legacy xread filter $predicate streams leak-source 0
+        stream_filter_legacy xread filter 0 streams leak-source 0
+        set result [lmap reply [r exec] {stream_filter_legacy_reply $reply}]
         assert_equal 1 [llength [lindex $result 0]]
         assert_equal {} [lindex $result 1]
         set result [r eval {
             return {redis.call('XREAD', 'FILTER', ARGV[1], 'STREAMS', KEYS[1], '0'),
                     redis.call('XREAD', 'FILTER', '0', 'STREAMS', KEYS[1], '0')}
         } 1 leak-source $predicate]
+        set result [lmap reply $result {stream_filter_legacy_reply $reply}]
         assert_equal 1 [llength [lindex $result 0]]
         assert_equal {} [lindex $result 1]
     }
@@ -37,7 +55,7 @@ proc stream_filter_leak_blocked {mode} {
     r xadd leak-live 1-0 region us amount 10
     set rd [redis_deferring_client]
     $rd client id
-    set id [$rd read]
+    set id [stream_filter_legacy_reply [$rd read]]
     # All waits are bounded, even when a regression prevents completion.
     set timeout [expr {$mode eq "timeout" ? 500 : 5000}]
     $rd xread block $timeout filter {.region in ["eu", "apac"] and .amount >= 500} streams leak-live 0
@@ -50,15 +68,15 @@ proc stream_filter_leak_blocked {mode} {
         success {
             r xadd leak-live 5-0 region eu amount 600
             wait_for_blocked_clients_count 0
-            assert_equal {{leak-live {{5-0 {region eu amount 600}}}}} [$rd read]
+            assert_equal {{leak-live {{5-0 {region eu amount 600}}}}} [stream_filter_legacy_reply [$rd read]]
         }
         timeout {
             wait_for_blocked_clients_count 0
-            assert_equal {} [$rd read]
+            assert_equal {} [stream_filter_legacy_reply [$rd read]]
         }
         unblock-timeout {
             assert_equal 1 [r client unblock $id timeout]
-            assert_equal {} [$rd read]
+            assert_equal {} [stream_filter_legacy_reply [$rd read]]
         }
         unblock-error {
             assert_equal 1 [r client unblock $id error]
@@ -70,7 +88,7 @@ proc stream_filter_leak_blocked {mode} {
     if {$mode ne "disconnect"} {
         # Reuse the connection to catch stale predicates as well as lost ones.
         $rd xread count 1 filter 1 streams leak-live 0
-        assert_equal {{leak-live {{1-0 {region us amount 10}}}}} [$rd read]
+        assert_equal {{leak-live {{1-0 {region us amount 10}}}}} [stream_filter_legacy_reply [$rd read]]
     }
     $rd close
     wait_for_blocked_clients_count 0

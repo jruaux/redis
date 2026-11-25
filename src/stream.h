@@ -187,7 +187,9 @@ typedef struct streamReplyRangeArgs {
                                    c->net_output_bytes_curr_cmd. */
     size_t emitted_before;      /* Entries already emitted before this call. */
     struct exprstate *filter;   /* Optional scalar predicate (no consumer group). */
-    streamID *last_examined;    /* Out: last entry evaluated, even if rejected. */
+    long long *scan_remaining; /* Shared FILTER budget, including deleted entries. */
+    size_t examined;           /* Out: entries examined by this call. */
+    streamID *last_examined;    /* Out: last entry examined, even if deleted/rejected. */
     void (*on_first_entry)(struct client *, void *); /* Lazy XREAD reply header. */
     void *on_first_entry_privdata;
 } streamReplyRangeArgs;

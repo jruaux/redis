@@ -44,27 +44,101 @@ Compatibility with vector sets includes these potentially surprising rules:
 Invalid expressions, including expressions with embedded NUL bytes, produce an
 error before scanning entries, including when the requested key does not exist.
 
-## Read behavior and cost
+## Read behavior, scan budget and continuation
+
+Without `FILTER`, command syntax, replies and read limits are unchanged.
+With `FILTER`, `MAXSCAN` limits entries examined, including rejected entries and
+retained deleted entries. Its default is **1,000**. An explicit override must be
+a positive signed 64-bit integer; `MAXSCAN` requires `FILTER`. There is no
+unlimited setting. `XREADGROUP` supports neither option.
+
+```text
+XRANGE events - + FILTER '.amount > 100' MAXSCAN 2000
+XREVRANGE events + - FILTER '.amount > 100' MAXSCAN 2000
+XREAD BLOCK 5000 FILTER '.region == "eu"' MAXSCAN 2000 STREAMS events 0
+```
 
 Matching entries retain ID order, reversed for `XREVRANGE`. `COUNT` limits
-matching entries; in `XREAD` it remains a per-stream limit. `MAXCOUNT` limits
-matches across streams and `MAXSIZE` limits reply bytes as usual. `XREAD` omits
-streams with no matches and returns its normal null response if none match.
-Range commands return an empty array for no matches, with existing `COUNT 0`
-behavior preserved.
+matches and remains per-stream in `XREAD`. `MAXCOUNT` limits matches across
+streams; `MAXSIZE` remains an approximate reply-byte threshold, allowing at
+least one entry. Envelope metadata can exceed that threshold.
 
-A blocking `XREAD` waits for at least one match or the original timeout. Rejected
-entries advance only that command's internal position. Repeated wakeups reuse
-the compiled predicate and do not recheck earlier entries or restart the timeout.
-`$` resolves once when the command begins. `+` initially examines only the last
-live entry; if it does not match, a blocking read waits for subsequent entries.
-Progress is transient; a new command using the same old ID scans again.
+`MAXSCAN` is command-wide: multiple XREAD streams share one budget, in argument
+order, and blocking wakeups consume the same remaining budget. On exhaustion,
+even a blocking read returns immediately, including when there are no matches.
+It never silently skips the unexamined remainder. A budget is an entry-work cap,
+not a wall-clock deadline: entry sizes, expression complexity, field lookup,
+and iterator positioning still affect execution time. Explicitly large overrides
+allow correspondingly more work on the server thread.
 
-Filtering adds no index, write amplification, or persistent stream metadata. It
-still examines each candidate entry and resolves fields by linear lookup. It
-saves reply bandwidth and client processing, but selective predicates can scan
-a large backlog and occupy the server thread. Result limits do not impose a scan-work budget, and
-there is no new continuation token.
+### Filtered replies
+
+Using `FILTER` selects a new reply schema. Existing clients need explicit
+support or a raw decoder. RESP3 replies use maps; RESP2 encodes each map as an
+alternating key/value array. Entries keep their usual `[id, [field, value, ...]]`
+structure. The following examples show logical maps:
+
+```json
+{
+  "entries": [["2-0", ["amount", "150"]]],
+  "last_scanned": "3-0",
+  "status": "budget_exhausted"
+}
+```
+
+`XRANGE` and `XREVRANGE` return `entries`, `last_scanned` and `status`:
+
+- `exhausted`: reached the end of the requested range.
+- `count_reached`: reached the matching result limit (`COUNT 0` returns no entries).
+- `budget_exhausted`: consumed the scan budget; more entries may remain.
+
+`last_scanned` is the last examined ID, even when that entry was rejected or
+deleted. It is null if no entry was examined, including absent keys and empty
+ranges. Resume `XRANGE` with `(<last_scanned>` as the start, preserving the end;
+resume `XREVRANGE` with `(<last_scanned>` as the first, upper bound, preserving
+the lower bound. Do not resume using the last matching ID.
+
+```json
+{
+  "streams": [
+    {"key": "orders", "entries": [["2-0", ["amount", "150"]]], "last_scanned": "3-0"},
+    {"key": "payments", "entries": [], "last_scanned": "0-0"}
+  ],
+  "status": "budget_exhausted"
+}
+```
+
+`XREAD` returns an ordered `streams` array containing **every requested stream**,
+including absent, empty, unvisited and duplicate keys. Each result contains
+`key`, `entries` and `last_scanned`. Unvisited streams retain their resolved
+input ID. Resume by supplying all these IDs in the same order to `XREAD`.
+`$` resolves to the current last-generated ID (or `0-0` for an absent stream);
+`+` resolves to the predecessor of the last live entry, so that entry remains
+eligible when the stream has not yet been visited.
+
+XREAD statuses are:
+
+- `caught_up`: completed the available scan without reaching a result or scan limit.
+- `result_limit`: a `COUNT`, `MAXCOUNT` or `MAXSIZE` limit stopped result delivery.
+- `budget_exhausted`: consumed the shared scan budget.
+- `timeout`: a blocked read timed out, including `CLIENT UNBLOCK ... TIMEOUT`.
+
+Scan-budget exhaustion takes precedence over a simultaneous result limit. It is
+conservative at the exact boundary: no lookahead is performed, so a continuation
+may return no entries. Similarly, a result-limit status does not promise more
+entries exist. A filtered read with no matches still returns an envelope.
+
+A blocking read with available budget waits for a match or the original timeout.
+Rejected entries advance its internal positions; repeated wakeups reuse the
+compiled predicate and do not recheck earlier entries or restart the timeout.
+A timeout returns an envelope with those positions. Within EXEC or Lua, a read
+that would block instead returns immediately with `caught_up`. `CLIENT UNBLOCK
+... ERROR` retains its normal error reply. Progress is transient; a new command
+using the same old IDs scans again and receives a fresh budget.
+
+Filtering adds no index, write amplification, or persistent stream metadata.
+Continuation does not create a snapshot: concurrent trimming or deletion can
+remove entries, as with ordinary stream reads.
 
 ## Implementation and validation
 
@@ -77,7 +151,7 @@ transactions, Lua, timeout, explicit unblocking, and client disconnection.
 Run the stream regressions with:
 
 ```sh
-./runtest --single unit/type/stream-filter --single unit/type/stream --single unit/type/stream-cgroups --single unit/moduleapi/stream --clients 4 --timeout 180
+./runtest --single unit/type/stream-filter --single unit/type/stream-filter-maxscan --single unit/type/stream --single unit/type/stream-cgroups --single unit/moduleapi/stream --clients 4 --timeout 180
 ```
 
 ### Compiled-filter leak regressions
@@ -100,7 +174,7 @@ build settings can otherwise override the sanitizer flags):
 
 ```sh
 make -C src -j4 SANITIZER=address LD=clang BUILD_COMPRESSION=no MALLOC=libc OPT=-O1 CFLAGS='-fsanitize=address -fno-sanitize-recover=all -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address' REDIS_CFLAGS='-Werror -DREDIS_TEST -DDEBUG_ASSERTIONS' all
-./runtest --single unit/type/stream-filter --single unit/type/stream-filter-leaks --clients 1 --timeout 180
+./runtest --single unit/type/stream-filter --single unit/type/stream-filter-maxscan --single unit/type/stream-filter-leaks --clients 1 --timeout 180
 ```
 
 ASAN detects invalid accesses and frees. Apple's runtime does not support
