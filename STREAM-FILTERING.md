@@ -83,3 +83,30 @@ Run the stream regressions with:
 
 For a compression-enabled build, also pass `--compression` and
 `--single unit/type/stream-compression`.
+
+### Compiled-filter leak regressions
+
+`unit/type/stream-filter-leaks` runs 2,000 read/error cycles (30,000 compilation
+attempts) and 200 blocked-reader cleanup cycles after warming caches and
+connection buffers. It checks Redis allocator usage after each batch against a
+64 KiB growth allowance. Coverage includes compile failures, failed field
+resolution, absent/wrong-type keys, EXEC/Lua, repeated wakeups, successful
+delivery, timeout, both CLIENT UNBLOCK modes, and disconnection. It uses
+allocator usage rather than RSS so retained allocator arenas do not mask the
+result. The normal macOS fixture also runs the system `leaks` checker.
+
+```sh
+./runtest --single unit/type/stream-filter-leaks --clients 1 --timeout 180
+```
+
+Run the filtering suites under AddressSanitizer with explicit flags (cached
+build settings can otherwise override the sanitizer flags):
+
+```sh
+make -C src -j4 SANITIZER=address LD=clang BUILD_COMPRESSION=yes MALLOC=libc OPT=-O1 CFLAGS='-fsanitize=address -fno-sanitize-recover=all -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address' REDIS_CFLAGS='-Werror -DREDIS_TEST -DDEBUG_ASSERTIONS' all
+./runtest --compression --single unit/type/stream-filter --single unit/type/stream-filter-leaks --clients 1 --timeout 180
+```
+
+ASAN detects invalid accesses and frees. Apple's runtime does not support
+LeakSanitizer on this platform; the explicit allocator-growth assertions and
+native `leaks` run provide separate leak coverage.
