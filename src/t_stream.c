@@ -2436,7 +2436,67 @@ void streamReadFilterTimeout(client *c) {
                                            boundaries, just the entries. */
 #define STREAM_RWR_HISTORY (1<<2)       /* Only serve consumer local PEL. */
 #define STREAM_RWR_CLAIMED (1<<3)       /* Only serve claimed entries from PEL. */
+/* Filtered reads own a separate loop so ordinary reads do not test the
+ * predicate or scan budget for every entry. Keep the unfiltered loop below
+ * unchanged when adding filtering behavior. */
+static size_t streamReplyWithRangeFiltered(client *c, stream *s, streamReplyRangeArgs *args) {
+    serverAssert(!args->group && !args->flags);
+    if (args->propCount) *args->propCount = 0;
+    streamFilterEntry entry = {0};
+    streamIterator si;
+    streamID id;
+    int64_t numfields;
+    size_t emitted = 0;
+    void *arraylen_ptr = NULL;
+
+    streamIteratorStart(&si, s, args->start, args->end, args->rev);
+    si.skip_tombstones = 0; /* Deleted entries also consume scan work. */
+    while (*args->scan_remaining > 0 && streamIteratorGetID(&si, &id, &numfields)) {
+        if (streamReplyMaxsizeReached(c, args->maxsize, args->emitted_before + emitted))
+            break;
+        --*args->scan_remaining;
+        args->examined++;
+        if (args->last_examined) *args->last_examined = id;
+        if (si.entry_flags & STREAM_ITEM_FLAG_DELETED) {
+            unsigned char *field, *value;
+            int64_t fieldlen, valuelen;
+            for (int64_t i = 0; i < numfields; i++)
+                streamIteratorGetField(&si, &field, &value, &fieldlen, &valuelen);
+            continue;
+        }
+        if (!streamEntryMatches(&si, numfields, args->filter, &entry)) continue;
+        if (!arraylen_ptr) {
+            if (args->on_first_entry)
+                args->on_first_entry(c, args->on_first_entry_privdata);
+            arraylen_ptr = addReplyDeferredLen(c);
+        }
+
+        addReplyArrayLen(c, args->min_idle_time != -1 ? 4 : 2);
+        robj *idarg = createObjectFromStreamID(&id);
+        addReplyBulk(c, idarg);
+        addReplyArrayLen(c, numfields * 2);
+        for (int64_t i = 0; i < numfields; i++) {
+            streamFilterField *f = &entry.fields[i];
+            addReplyBulkCBuffer(c, f->field, f->field_len);
+            addReplyBulkCBuffer(c, f->value, f->value_len);
+        }
+        if (args->min_idle_time != -1) {
+            addReplyLongLong(c, 0);
+            addReplyLongLong(c, 0);
+        }
+        decrRefCount(idarg);
+        emitted++;
+        if (args->count && emitted == args->count) break;
+    }
+    streamIteratorStop(&si);
+    zfree(entry.fields);
+    if (arraylen_ptr) setDeferredArrayLen(c, arraylen_ptr, emitted);
+    else if (!args->on_first_entry) addReplyArrayLen(c, 0);
+    return emitted;
+}
+
 size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
+    if (args->filter) return streamReplyWithRangeFiltered(c, s, args);
     streamID *start = args->start;
     streamID *end = args->end;
     size_t count = args->count;
@@ -2451,8 +2511,6 @@ size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
     size_t emitted_before = args->emitted_before;
     void *arraylen_ptr = NULL;
     size_t arraylen = 0;
-    streamFilterEntry filter_entry = {0};
-    serverAssert(!args->filter || (!group && !args->flags));
     streamIterator si;
     int64_t numfields;
     streamID id;
@@ -2585,35 +2643,14 @@ size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
         return arraylen;
     }
 
-    if (!(flags & STREAM_RWR_RAWENTRIES) && !arraylen_ptr && !args->filter)
+    if (!(flags & STREAM_RWR_RAWENTRIES) && !arraylen_ptr)
         arraylen_ptr = addReplyDeferredLen(c);
     streamIteratorStart(&si,s,start,end,rev);
-    if (args->filter) si.skip_tombstones = 0; /* Deleted entries also consume scan work. */
-    while ((!args->filter || *args->scan_remaining > 0) &&
-           streamIteratorGetID(&si,&id,&numfields)) {
+    while (streamIteratorGetID(&si,&id,&numfields)) {
         /* Break before delivering the entry so it is neither sent nor added to
          * the consumer's PEL. */
         if (streamReplyMaxsizeReached(c, maxsize, emitted_before + arraylen))
             break;
-
-        if (args->filter) {
-            --*args->scan_remaining;
-            args->examined++;
-            if (args->last_examined) *args->last_examined = id;
-            if (si.entry_flags & STREAM_ITEM_FLAG_DELETED) {
-                unsigned char *field, *value;
-                int64_t fieldlen, valuelen;
-                for (int64_t i = 0; i < numfields; i++)
-                    streamIteratorGetField(&si, &field, &value, &fieldlen, &valuelen);
-                continue;
-            }
-            if (!streamEntryMatches(&si, numfields, args->filter, &filter_entry)) continue;
-            if (!arraylen_ptr) {
-                if (args->on_first_entry)
-                    args->on_first_entry(c, args->on_first_entry_privdata);
-                arraylen_ptr = addReplyDeferredLen(c);
-            }
-        }
 
         /* Update the group last_id if needed. */
         if (group && streamCompareID(&id,&group->last_id) > 0) {
@@ -2651,21 +2688,12 @@ size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
         addReplyArrayLen(c,numfields*2);
 
         /* Emit the field-value pairs. */
-        if (args->filter) {
-            for (int64_t i = 0; i < numfields; i++) {
-                streamFilterField *f = &filter_entry.fields[i];
-                addReplyBulkCBuffer(c,f->field,f->field_len);
-                addReplyBulkCBuffer(c,f->value,f->value_len);
-            }
-        } else {
-            /* Keep the original unfiltered loop free of per-field checks. */
-            while (numfields--) {
-                unsigned char *key, *value;
-                int64_t key_len, value_len;
-                streamIteratorGetField(&si,&key,&value,&key_len,&value_len);
-                addReplyBulkCBuffer(c,key,key_len);
-                addReplyBulkCBuffer(c,value,value_len);
-            }
+        while (numfields--) {
+            unsigned char *key, *value;
+            int64_t key_len, value_len;
+            streamIteratorGetField(&si,&key,&value,&key_len,&value_len);
+            addReplyBulkCBuffer(c,key,key_len);
+            addReplyBulkCBuffer(c,value,value_len);
         }
 
         if (min_idle_time != -1) {
@@ -2747,9 +2775,7 @@ size_t streamReplyWithRange(client *c, stream *s, streamReplyRangeArgs *args) {
     }
 
     streamIteratorStop(&si);
-    if (args->filter) zfree(filter_entry.fields);
     if (arraylen_ptr) setDeferredArrayLen(c,arraylen_ptr,arraylen);
-    else if (args->filter && !args->on_first_entry) addReplyArrayLen(c, 0);
     return arraylen;
 }
 
@@ -3264,7 +3290,13 @@ void xlenCommand(client *c) {
  * This is useful because while XREAD is a read command and can be called
  * on slaves, XREADGROUP is not. */
 #define XREAD_BLOCKED_DEFAULT_COUNT 1000
-void xreadCommand(client *c) {
+/* Constant specialization keeps FILTER bookkeeping out of ordinary XREAD.
+ * The filtered entry point stays out of line so its state does not enlarge
+ * the ordinary command's live variables or stack frame. */
+static void xreadFilteredCommand(client *c) __attribute__((noinline));
+
+static inline __attribute__((always_inline))
+void xreadGenericCommand(client *c, int filtering) {
     long long min_idle_time = -1; /* -1 means, no IDLE argument given. */
     uint64_t timeout = 0;
     int has_block_timeout = 0;
@@ -3330,19 +3362,6 @@ void xreadCommand(client *c) {
                 addReplyError(c,"MAXSIZE must be a positive integer");
                 return;
             }
-        } else if (!strcasecmp(o,"MAXSCAN") && moreargs && !maxscan_given) {
-            maxscan_given = 1;
-            if (getLongLongFromObjectOrReply(c, c->argv[++i], &maxscan, NULL) != C_OK) return;
-            if (maxscan <= 0) {
-                addReplyError(c, "MAXSCAN must be a positive integer");
-                return;
-            }
-        } else if (!strcasecmp(o,"FILTER") && moreargs && !filter_arg) {
-            if (xreadgroup) {
-                addReplyError(c,"FILTER is not supported by XREADGROUP");
-                return;
-            }
-            filter_arg = c->argv[++i];
         } else if (!strcasecmp(o,"STREAMS") && moreargs) {
             streams_arg = i+1;
             streams_count = (c->argc-streams_arg);
@@ -3355,6 +3374,19 @@ void xreadCommand(client *c) {
             }
             streams_count /= 2; /* We have two arguments for each stream. */
             break;
+        } else if (filtering && !strcasecmp(o,"MAXSCAN") && moreargs && !maxscan_given) {
+            maxscan_given = 1;
+            if (getLongLongFromObjectOrReply(c, c->argv[++i], &maxscan, NULL) != C_OK) return;
+            if (maxscan <= 0) {
+                addReplyError(c, "MAXSCAN must be a positive integer");
+                return;
+            }
+        } else if (filtering && !strcasecmp(o,"FILTER") && moreargs && !filter_arg) {
+            if (xreadgroup) {
+                addReplyError(c,"FILTER is not supported by XREADGROUP");
+                return;
+            }
+            filter_arg = c->argv[++i];
         } else if (!strcasecmp(o,"GROUP") && moreargs >= 2) {
             if (!xreadgroup) {
                 addReplyError(c,"The GROUP option is only supported by "
@@ -3372,6 +3404,12 @@ void xreadCommand(client *c) {
             }
             noack = 1;
         } else {
+            /* Restart only FILTER reads in the specialized slow path. Parsing
+             * has not modified stream state or installed a predicate yet. */
+            if (!filtering && (!strcasecmp(o,"FILTER") || !strcasecmp(o,"MAXSCAN"))) {
+                xreadFilteredCommand(c);
+                return;
+            }
             addReplyErrorObject(c,shared.syntaxerr);
             return;
         }
@@ -3397,19 +3435,22 @@ void xreadCommand(client *c) {
         return;
     }
 
-    if (maxscan_given && !filter_arg) {
-        addReplyError(c, "MAXSCAN requires FILTER");
-        return;
-    }
+    exprstate *filter = NULL;
+    if (filtering) {
+        if (maxscan_given && !filter_arg) {
+            addReplyError(c, "MAXSCAN requires FILTER");
+            return;
+        }
 
-    /* Retain the compiled predicate until command completion, including any
-     * number of blocking wakeups. resetClient/freeClient own final cleanup. */
-    if (filter_arg && !c->stream_read_filter) {
-        c->stream_read_filter = streamCompileFilter(c, filter_arg);
-        if (!c->stream_read_filter) return;
-        c->stream_read_scan_remaining = maxscan;
+        /* Retain the compiled predicate until command completion, including any
+         * number of blocking wakeups. resetClient/freeClient own final cleanup. */
+        if (filter_arg && !c->stream_read_filter) {
+            c->stream_read_filter = streamCompileFilter(c, filter_arg);
+            if (!c->stream_read_filter) return;
+            c->stream_read_scan_remaining = maxscan;
+        }
+        filter = c->stream_read_filter;
     }
-    exprstate *filter = c->stream_read_filter;
 
     /* Parse the IDs and resolve the group name. */
     if (streams_count > STREAMID_STATIC_VECTOR_LEN)
@@ -3671,7 +3712,7 @@ void xreadCommand(client *c) {
                 .filter = filter, .last_examined = filter ? gt : NULL,
                 .scan_remaining = filter ? &c->stream_read_scan_remaining : NULL,
                 .on_first_entry = filter ? streamReadReplyHeader : NULL,
-                .on_first_entry_privdata = &filter_reply,
+                .on_first_entry_privdata = filter ? &filter_reply : NULL,
             };
             /* New deliveries (XREADGROUP without NOACK) add entries to this
              * group's PEL; snapshot it around the read for INFO Streams. */
@@ -3768,7 +3809,7 @@ cleanup: /* Cleanup. */
 
     /* EXEC and Lua can run another command before resetClient(). Only a
      * genuinely blocked XREAD owns a predicate beyond this invocation. */
-    if (c->stream_read_filter && !(c->flags & CLIENT_BLOCKED)) {
+    if (filtering && c->stream_read_filter && !(c->flags & CLIENT_BLOCKED)) {
         exprFree(c->stream_read_filter);
         c->stream_read_filter = NULL;
     }
@@ -3778,6 +3819,14 @@ cleanup: /* Cleanup. */
     preventCommandPropagation(c);
     if (ids != static_ids) zfree(ids);
     zfree(groups);
+}
+
+void xreadCommand(client *c) {
+    xreadGenericCommand(c, 0);
+}
+
+static void xreadFilteredCommand(client *c) {
+    xreadGenericCommand(c, 1);
 }
 
 /* -----------------------------------------------------------------------

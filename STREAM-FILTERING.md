@@ -144,8 +144,9 @@ remove entries, as with ordinary stream reads.
 
 `src/expr.c` owns the shared parser/evaluator. `modules/vector-sets/expr.c` supplies
 its existing JSON adapter; `src/t_stream.c` supplies the stream-field adapter.
-The unfiltered read path does not allocate field scratch space or evaluate a
-predicate. Blocking filter ownership is tied to command completion, including
+A dispatch before scanning sends filtered reads to a separate loop. The original
+unfiltered loop contains no predicate or scan-budget checks and does not allocate
+field scratch space. Blocking filter ownership is tied to command completion, including
 transactions, Lua, timeout, explicit unblocking, and client disconnection.
 
 Run the stream regressions with:

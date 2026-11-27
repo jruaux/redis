@@ -54,6 +54,10 @@ proc stream_filter_leak_blocked {mode} {
     set clients [s connected_clients]
     r xadd leak-live 1-0 region us amount 10
     set rd [redis_deferring_client]
+    if {$mode eq "acl-error"} {
+        $rd auth filter-leak-reader filter-leak-password
+        assert_equal OK [$rd read]
+    }
     $rd client id
     set id [stream_filter_legacy_reply [$rd read]]
     # All waits are bounded, even when a regression prevents completion.
@@ -81,6 +85,23 @@ proc stream_filter_leak_blocked {mode} {
         unblock-error {
             assert_equal 1 [r client unblock $id error]
             assert_error {*UNBLOCKED*} {$rd read}
+        }
+        acl-error {
+            # Reject the wakeup before call() can invoke XREAD again.
+            r acl setuser filter-leak-reader -xread
+            r xadd leak-live 5-0 region eu amount 600
+            wait_for_blocked_clients_count 0
+            assert_error {*NOPERM*} {$rd read}
+            r acl setuser filter-leak-reader +xread
+        }
+        pause {
+            # Wake the reader while CLIENT PAUSE forces command postponement.
+            r multi
+            r xadd leak-live 5-0 region eu amount 600
+            r client pause 100 all
+            r exec
+            assert_equal {{leak-live {{5-0 {region eu amount 600}}}}} [stream_filter_legacy_reply [$rd read]]
+            wait_for_blocked_clients_count 0
         }
         disconnect {}
         default {fail "Unknown cleanup mode $mode"}
@@ -128,4 +149,14 @@ start_server {tags {"stream" "external:skip" "cluster:skip"}} {
             assert_lessthan $growth 65536 "Blocked filter memory grew by $growth bytes"
         }
     }
+
+    test {Compiled stream filters clean up after rejected and postponed wakeups} {
+        r acl setuser filter-leak-reader on >filter-leak-password ~* +@all
+        for {set i 0} {$i < 10} {incr i} {
+            stream_filter_leak_blocked acl-error
+            stream_filter_leak_blocked pause
+        }
+        r acl deluser filter-leak-reader
+    }
+
 }

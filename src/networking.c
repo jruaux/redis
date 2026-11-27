@@ -3118,10 +3118,6 @@ void resetClientQbufState(client *c) {
 
 static inline void resetClientInternal(client *c, int num_pcmds_to_free) {
     redisCommandProc *prevcmd = c->cmd ? c->cmd->proc : NULL;
-    if (c->stream_read_filter) {
-        exprFree(c->stream_read_filter);
-        c->stream_read_filter = NULL;
-    }
 
     /* We may get here with no pending commands but with an argv that needs freeing.
      * An example is in the case of modules (RM_Call) */
@@ -3144,8 +3140,15 @@ static inline void resetClientInternal(client *c, int num_pcmds_to_free) {
     c->cur_script = NULL;
     c->slot = -1;
     c->cluster_compatibility_check_slot = -2;
-    if (c->flags & CLIENT_EXECUTING_COMMAND)
+    if (c->flags & CLIENT_EXECUTING_COMMAND) {
+        /* Synchronous XREAD frees its filter before returning. Only a command
+         * that remained executing while blocked can leave one for reset. */
+        if (c->stream_read_filter) {
+            exprFree(c->stream_read_filter);
+            c->stream_read_filter = NULL;
+        }
         c->flags &= ~CLIENT_EXECUTING_COMMAND;
+    }
 
     /* Make sure the duration has been recorded to some command. */
     serverAssert(c->duration == 0);
