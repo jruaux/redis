@@ -1,7 +1,7 @@
 {
     "XREVRANGE": {
         "summary": "Returns the messages from a stream within a range of IDs in reverse order.",
-        "complexity": "O(N) with N being the number of elements returned. If N is constant (e.g. always asking for the first 10 elements with COUNT), you can consider it O(1).",
+        "complexity": "O(N) with N being the number of entries returned without FILTER. With FILTER, MAXSCAN bounds examined entries (default 1000), including deleted entries; each live entry also incurs expression evaluation and field lookup cost. Result limits count matches.",
         "group": "stream",
         "since": "5.0.0",
         "arity": -4,
@@ -57,30 +57,102 @@
                 "name": "count",
                 "type": "integer",
                 "optional": true
+            },
+            {
+                "token": "FILTER",
+                "name": "expression",
+                "type": "string",
+                "optional": true
+            },
+            {
+                "token": "MAXSCAN",
+                "name": "maxscan",
+                "type": "integer",
+                "optional": true
             }
         ],
         "reply_schema": {
-            "description": "An array of the entries with IDs matching the specified range",
-            "type": "array",
-            "items": {
-                "type": "array",
-                "minItems": 2,
-                "maxItems": 2,
-                "items": [
-                    {
-                        "description": "Stream id",
-                        "type": "string",
-                        "pattern": "[0-9]+-[0-9]+"
-                    },
-                    {
-                        "description": "Array of field-value pairs",
+            "oneOf": [
+                {
+                    "description": "An array of the entries with IDs matching the specified range",
+                    "type": "array",
+                    "items": {
                         "type": "array",
-                        "items": {
-                            "type": "string"
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": [
+                            {
+                                "description": "Stream id",
+                                "type": "string",
+                                "pattern": "[0-9]+-[0-9]+"
+                            },
+                            {
+                                "description": "Array of field-value pairs",
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "description": "With FILTER: entries, scan progress and termination status. RESP2 encodes the map as alternating keys and values.",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "entries": {
+                            "description": "An array of the entries with IDs matching the specified range",
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "items": [
+                                    {
+                                        "description": "Stream id",
+                                        "type": "string",
+                                        "pattern": "[0-9]+-[0-9]+"
+                                    },
+                                    {
+                                        "description": "Array of field-value pairs",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "last_scanned": {
+                            "description": "Last examined ID (including deleted and rejected entries), or null if no entry was examined.",
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "pattern": "[0-9]+-[0-9]+"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "status": {
+                            "type": "string",
+                            "oneOf": [
+                                {
+                                    "const": "exhausted"
+                                },
+                                {
+                                    "const": "count_reached"
+                                },
+                                {
+                                    "const": "budget_exhausted"
+                                }
+                            ]
                         }
                     }
-                ]
-            }
+                }
+            ]
         }
     }
 }

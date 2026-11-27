@@ -70,6 +70,18 @@
                 "optional": true
             },
             {
+                "token": "FILTER",
+                "name": "expression",
+                "type": "string",
+                "optional": true
+            },
+            {
+                "token": "MAXSCAN",
+                "name": "maxscan",
+                "type": "integer",
+                "optional": true
+            },
+            {
                 "name": "streams",
                 "token": "STREAMS",
                 "type": "block",
@@ -122,8 +134,73 @@
                 {
                     "description": "If BLOCK option is given, and a timeout occurs, or there is no stream we can serve",
                     "type": "null"
+                },
+                {
+                    "description": "With FILTER: one ordered result per requested stream, including empty and unvisited streams, and termination status. RESP2 encodes maps as alternating keys and values.",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "streams": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "key": {
+                                        "type": "string"
+                                    },
+                                    "entries": {
+                                        "description": "The entries reported for that key",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "maxItems": 2,
+                                            "items": [
+                                                {
+                                                    "description": "entry id",
+                                                    "type": "string",
+                                                    "pattern": "[0-9]+-[0-9]+"
+                                                },
+                                                {
+                                                    "description": "array of field-value pairs",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    "last_scanned": {
+                                        "description": "Last examined ID, or the resolved input ID if unvisited.",
+                                        "type": "string",
+                                        "pattern": "[0-9]+-[0-9]+"
+                                    }
+                                }
+                            }
+                        },
+                        "status": {
+                            "type": "string",
+                            "oneOf": [
+                                {
+                                    "const": "caught_up"
+                                },
+                                {
+                                    "const": "result_limit"
+                                },
+                                {
+                                    "const": "budget_exhausted"
+                                },
+                                {
+                                    "const": "timeout"
+                                }
+                            ]
+                        }
+                    }
                 }
             ]
-        }
+        },
+        "complexity": "Without FILTER, O(N) for entries returned per stream, plus the number of requested streams. With FILTER, MAXSCAN bounds examined entries (default 1000), including deleted entries; each live entry also incurs expression evaluation and field lookup cost. Result limits count matches."
     }
 }

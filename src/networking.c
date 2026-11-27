@@ -13,6 +13,7 @@
  */
 
 #include "server.h"
+#include "expr.h"
 #include "atomicvar.h"
 #include "cluster.h"
 #include "cluster_slot_stats.h"
@@ -121,6 +122,7 @@ int authRequired(client *c) {
 
 client *createClient(connection *conn) {
     client *c = zmalloc(sizeof(client));
+    c->stream_read_filter = NULL;
 
     /* passing NULL as conn it is possible to create a non connected client.
      * This is useful since all the commands needs to be executed
@@ -2366,6 +2368,8 @@ void freeClient(client *c) {
     c->duration = 0;
     if (c->flags & CLIENT_BLOCKED) unblockClient(c, 1);
     dictRelease(c->bstate.keys);
+    exprFree(c->stream_read_filter);
+    c->stream_read_filter = NULL;
 
     /* UNWATCH all the keys */
     unwatchAllKeys(c);
@@ -3136,8 +3140,15 @@ static inline void resetClientInternal(client *c, int num_pcmds_to_free) {
     c->cur_script = NULL;
     c->slot = -1;
     c->cluster_compatibility_check_slot = -2;
-    if (c->flags & CLIENT_EXECUTING_COMMAND)
+    if (c->flags & CLIENT_EXECUTING_COMMAND) {
+        /* Synchronous XREAD frees its filter before returning. Only a command
+         * that remained executing while blocked can leave one for reset. */
+        if (c->stream_read_filter) {
+            exprFree(c->stream_read_filter);
+            c->stream_read_filter = NULL;
+        }
         c->flags &= ~CLIENT_EXECUTING_COMMAND;
+    }
 
     /* Make sure the duration has been recorded to some command. */
     serverAssert(c->duration == 0);
@@ -5313,7 +5324,9 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval) {
         c->argv[i] = NULL;
     }
     oldval = c->argv[i];
-    if (oldval) c->all_argv_len_sum -= getStringObjectLen(oldval);
+    /* Repeated rewrites may release the last reference to oldval below. */
+    size_t oldlen = oldval ? getStringObjectLen(oldval) : 0;
+    c->all_argv_len_sum -= oldlen;
 
     if (newval) {
         c->argv[i] = newval;
@@ -5332,7 +5345,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval) {
         pcmd->argv = c->argv;
         pcmd->argc = c->argc;
         pcmd->argv_len = c->argv_len;
-        if (oldval) pcmd->argv_len_sum -= getStringObjectLen(oldval);
+        pcmd->argv_len_sum -= oldlen;
         if (newval) pcmd->argv_len_sum += getStringObjectLen(newval);
     }
 
